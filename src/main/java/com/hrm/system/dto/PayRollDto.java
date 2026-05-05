@@ -16,6 +16,7 @@ public class PayRollDto {
         private String month; // stored as "YYYY-MM" string
         private double salary;
         private double deductions;
+        private double netSalary;
         private double bonuses;
     }
 

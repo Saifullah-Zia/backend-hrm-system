@@ -13,6 +13,7 @@ public class LeaveDto {
 
     private Long id;
     private LocalDate startDate;
+    private String leaveType;
     private LocalDate endDate;
     private String reason;
     private String status; // APPROVED, PENDING, REJECTED

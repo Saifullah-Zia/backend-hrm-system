@@ -25,7 +25,7 @@ public class Leave {
     private String type;
 
     @NotBlank(message = "Status is required")
-    private String status;
+    private LeaveStatus status;
 
     @NotNull(message = "Start date is required")
     @FutureOrPresent(message = "Start date cannot be in the past")

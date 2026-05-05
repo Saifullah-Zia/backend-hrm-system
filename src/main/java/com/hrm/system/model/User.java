@@ -26,6 +26,7 @@ public class User {
     private String name;
 
     @Column(unique = true, nullable = false)
+    @NotBlank
     private String email;
 
     @JsonProperty(access = JsonProperty.Access.WRITE_ONLY)  // ✅ allows input, hides in output

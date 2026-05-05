@@ -23,6 +23,7 @@ public class Payroll {
     private Double salary;
     private Double deduction;
     private Double bonuses;
+    private double netSalary;
 
     @ManyToOne
     @JoinColumn(name = "user_id")
