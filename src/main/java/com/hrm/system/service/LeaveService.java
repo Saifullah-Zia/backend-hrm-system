@@ -50,7 +50,7 @@ public class LeaveService {
     }
 
     //get leave by userId
-    public List<LeaveDto> getLeaveByUserID(Long id){
+    public List<LeaveDto> getLeaveByUserID(Long userId){
         return  leaveRepository.findAll()
                 .stream()
                 .map(this::mapToDto)
