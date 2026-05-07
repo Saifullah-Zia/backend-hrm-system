@@ -7,10 +7,12 @@ import com.hrm.system.model.User;
 import com.hrm.system.repository.LeaveRepository;
 import com.hrm.system.repository.UserRepository;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Service;
 
 import java.util.List;
 import java.util.stream.Collectors;
 
+@Service
 public class LeaveService {
 
     @Autowired
@@ -29,14 +31,14 @@ public class LeaveService {
         leave.setType(dto.getLeaveType());
         leave.setStartDate(dto.getStartDate());
         leave.setEndDate(dto.getEndDate());
-        leave.setStatus(LeaveStatus.valueOf(dto.getStatus()));
+        leave.setStatus(LeaveStatus.PENDING);
 
         Leave saved = leaveRepository.save(leave);
         return mapToDto(saved);
     }
 
-        //get all leaves
-        public List<LeaveDto> getAllLeaves(){
+    //get all leaves
+    public List<LeaveDto> getAllLeaves(){
         return leaveRepository.findAll()
                 .stream().map(this::mapToDto).collect(Collectors.toList());
     }
@@ -51,16 +53,20 @@ public class LeaveService {
 
     //get leave by userId
     public List<LeaveDto> getLeaveByUserID(Long userId){
-        return  leaveRepository.findAll()
+        return  leaveRepository.findByUserId(userId)
                 .stream()
                 .map(this::mapToDto)
                 .collect(Collectors.toList());
     }
 
     //get Leave by status
-    public List<LeaveDto> getLeaveByStatus(String status){
-        return leaveRepository.findAll()
-                .stream().map(this::mapToDto)
+    public List<LeaveDto> getLeaveByStatus(String status) {
+        LeaveStatus leaveStatus = LeaveStatus.valueOf(status.toUpperCase());
+        System.out.println(">>> Querying by status: " + leaveStatus); // add this
+        List<Leave> results = leaveRepository.findByStatus(leaveStatus);
+        System.out.println(">>> Results count: " + results.size()); // add this
+        return results.stream()
+                .map(this::mapToDto)
                 .collect(Collectors.toList());
     }
 
@@ -93,18 +99,18 @@ public class LeaveService {
         leave.setType(dto.getLeaveType());
         leave.setStartDate(dto.getStartDate());
         leave.setEndDate(dto.getEndDate());
-        leave.setStatus(LeaveStatus.valueOf(dto.getStatus()));
+        leave.setStatus(LeaveStatus.PENDING);
 
         return mapToDto(leaveRepository.save(leave));
     }
 
-    //update delete if still pending
+    //delete if still pending
     public  void deleteLeave(Long id){
         Leave leave = leaveRepository.findById(id)
                 .orElseThrow(()-> new RuntimeException("user is not found on this ID" +id));
 
         if(!leave.getStatus().equals(LeaveStatus.PENDING)){
-            throw new RuntimeException("Cannot delete a leave that is already \" + leave.getStatus()");
+            throw new RuntimeException("Cannot delete a leave that is already" + leave.getStatus());
         }
         leaveRepository.deleteById(id);
     }

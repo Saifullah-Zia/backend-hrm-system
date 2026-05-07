@@ -40,9 +40,9 @@ public class LeaveController {
     }
 
     //get all leave by userid
-    @GetMapping("/user/userId")
+    @GetMapping("/user/{userId}")
     @PreAuthorize("hasRole('SUPER_ADMIN') or hasRole('ADMIN') or hasRole('EMPLOYEE')")
-    public  ResponseEntity<List<LeaveDto>> getLeaveByUserId(Long userId){
+    public  ResponseEntity<List<LeaveDto>> getLeaveByUserId( @PathVariable Long userId){
         return ResponseEntity.ok(leaveService.getLeaveByUserID(userId));
     }
 

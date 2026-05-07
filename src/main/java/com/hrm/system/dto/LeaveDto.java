@@ -1,5 +1,7 @@
 package com.hrm.system.dto;
 
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
@@ -17,5 +19,6 @@ public class LeaveDto {
     private LocalDate endDate;
     private String reason;
     private String status; // APPROVED, PENDING, REJECTED
+
     private Long userId;   // reference to user
 }

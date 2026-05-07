@@ -57,7 +57,7 @@ public class PayRollService {
 
     // get payroll by user id
     public List<PayRollDto> getPayrollByUserId(Long userId){
-        return payrollRepository.findById(userId)
+        return payrollRepository.findByUserId(userId)
                 .stream()
                 .map(this::mapToDto)
                 .collect(Collectors.toList());

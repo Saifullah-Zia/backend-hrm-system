@@ -24,7 +24,8 @@ public class Leave {
     @NotBlank(message = "Leave type is required")
     private String type;
 
-    @NotBlank(message = "Status is required")
+    @Enumerated(EnumType.STRING)
+    @Column(name = "status")
     private LeaveStatus status;
 
     @NotNull(message = "Start date is required")

@@ -1,11 +1,15 @@
 package com.hrm.system.model;
+
 import jakarta.persistence.*;
 import jakarta.validation.constraints.NotBlank;
-import lombok.*;
-import org.springframework.data.annotation.CreatedDate;
-import org.springframework.data.annotation.LastModifiedDate;
+import lombok.AllArgsConstructor;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
 import org.springframework.data.annotation.CreatedBy;
+import org.springframework.data.annotation.CreatedDate;
 import org.springframework.data.annotation.LastModifiedBy;
+import org.springframework.data.annotation.LastModifiedDate;
 import org.springframework.data.jpa.domain.support.AuditingEntityListener;
 
 import java.time.LocalDateTime;
@@ -16,38 +20,22 @@ import java.util.List;
 @NoArgsConstructor
 @AllArgsConstructor
 @Entity
-@Table(name = "users")
 @EntityListeners(AuditingEntityListener.class)
-public class User {
+public class Department {
 
-    @Id
+    @id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
     @NotBlank
-    private String name;
+    @Column(unique = true , nullable = false)
+    private  String name;
 
-    @Column(unique = true, nullable = false)
-    @NotBlank
-    private String email;
+    private String description;
 
-    @NotBlank
-    private String password;
+    @OneToMany(mappedBy = "department",cascade = CascadeType.ALL)
+    private List<EmployeeProfile> employee;
 
-    @Enumerated(EnumType.STRING)
-    private Role role;
-
-    // Relationships
-    @OneToMany(mappedBy = "user", cascade = CascadeType.ALL)
-    private List<Attendance> attendances;
-
-    @OneToMany(mappedBy = "user", cascade = CascadeType.ALL)
-    private List<Leave> leaves;
-
-    @OneToMany(mappedBy = "user", cascade = CascadeType.ALL)
-    private List<Payroll> payrolls;
-
-    // Audit fields
     @CreatedDate
     @Column(updatable = false)
     private LocalDateTime createdAt;
