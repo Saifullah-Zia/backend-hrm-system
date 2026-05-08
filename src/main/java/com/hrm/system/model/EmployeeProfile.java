@@ -3,7 +3,7 @@ package com.hrm.system.model;
 import jakarta.persistence.*;
 import jakarta.persistence.Id;
 import lombok.*;
-import org.aspectj.weaver.Position;
+import com.hrm.system.model.Position;
 import org.springframework.data.annotation.*;
 import org.springframework.data.jpa.domain.support.AuditingEntityListener;
 import java.time.LocalDate;
@@ -56,4 +56,6 @@ public class EmployeeProfile {
 
     @LastModifiedBy
     private String updatedBy;
+
+
 }

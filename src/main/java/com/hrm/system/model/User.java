@@ -34,6 +34,9 @@ public class User {
     @NotBlank
     private String password;
 
+    @Column(name = "basic_salary")
+    private Double basicSalary;
+
     @Enumerated(EnumType.STRING)
     private Role role;
 

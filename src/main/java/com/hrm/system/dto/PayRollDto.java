@@ -9,14 +9,14 @@ import lombok.Setter;
 @Setter
 @NoArgsConstructor
 @AllArgsConstructor
-
 public class PayRollDto {
-        private Long id;
-        private Long userId;
-        private String month; // stored as "YYYY-MM" string
-        private double salary;
-        private double deductions;
-        private double netSalary;
-        private double bonuses;
-    }
-
+    private Long id;
+    private Long userId;
+    private String userName;
+    private String month;
+    private Double salary;      // Changed from double to Double
+    private Double bonuses;     // Changed from double to Double
+    private Double deductions;  // Changed from double to Double
+    private Double netSalary;   // Changed from double to Double
+    private String status;
+}

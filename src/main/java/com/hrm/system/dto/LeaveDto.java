@@ -20,5 +20,6 @@ public class LeaveDto {
     private String reason;
     private String status; // APPROVED, PENDING, REJECTED
 
-    private Long userId;   // reference to user
+    private Long userId;
+    private String userName;// reference to user
 }

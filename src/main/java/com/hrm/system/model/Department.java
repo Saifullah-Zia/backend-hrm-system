@@ -23,7 +23,7 @@ import java.util.List;
 @EntityListeners(AuditingEntityListener.class)
 public class Department {
 
-    @id
+    @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
