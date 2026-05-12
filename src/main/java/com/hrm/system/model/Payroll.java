@@ -1,5 +1,6 @@
 package com.hrm.system.model;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
@@ -36,8 +37,9 @@ public class Payroll {
     @Column(name = "net_salary")
     private Double netSalary = 0.0;
 
-    @ManyToOne
-    @JoinColumn(name = "user_id", nullable = false)
+    @ManyToOne(fetch = FetchType.EAGER)
+    @JoinColumn(name = "user_id")
+    @JsonIgnore
     private User user;
 
     @Column(name = "status", nullable = false)

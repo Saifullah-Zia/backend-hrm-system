@@ -102,14 +102,16 @@ public class UserService implements UserDetailsService {
 
     // Required by Spring Security for JWT authentication
     @Override
-    public UserDetails loadUserByUsername(String email) throws UsernameNotFoundException {
-        User user = userRepository.findByEmail(email)
-                .orElseThrow(() -> new UsernameNotFoundException("User not found with email: " + email));
+    public UserDetails loadUserByUsername(String username) throws UsernameNotFoundException {
+        // Try finding by email first
+        User user = userRepository.findByEmail(username)
+                .orElseGet(() -> userRepository.findByName(username)
+                        .orElseThrow(() -> new UsernameNotFoundException("User not found with email or name: " + username)));
 
         return org.springframework.security.core.userdetails.User
                 .withUsername(user.getEmail())
                 .password(user.getPassword())
-                .authorities(user.getRole().name()) // map Role enum to authority
+                .authorities("ROLE_" + user.getRole().name())
                 .build();
     }
 }

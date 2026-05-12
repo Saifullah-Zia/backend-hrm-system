@@ -23,6 +23,9 @@ public class PayRollService {
     @Autowired
     private EmailService emailService;
 
+    @Autowired
+    private NotificationService notificationService;
+
     // ─── Generate payroll for all employees ──────────────────────────────────
 
     public void generatePayrollForAllEmployees(int month, int year) {
@@ -44,7 +47,16 @@ public class PayRollService {
                 payroll.setNetSalary(employee.getBasicSalary());
                 payroll.setStatus("PENDING");
 
-                payrollRepository.save(payroll);
+                Payroll saved = payrollRepository.save(payroll);
+
+                notificationService.createNotification(
+                        employee.getId(),
+                        String.format("💰 Your payroll for %s has been generated. Net salary: %.2f",
+                                monthStr, employee.getBasicSalary()),
+                        "PAYROLL",
+                        employee.getId(),
+                        saved.getId()
+                );
 
                 try {
                     emailService.sendPayrollNotification(employee.getEmail(), monthStr, year);
@@ -76,8 +88,32 @@ public class PayRollService {
         ));
         payroll.setMonth(dto.getMonth());
         payroll.setStatus(dto.getStatus() != null ? dto.getStatus() : "PENDING");
+        payroll.setYear(Integer.parseInt(dto.getMonth().split("-")[0]));
 
-        return mapToDto(payrollRepository.save(payroll));
+        Payroll saved = payrollRepository.save(payroll);
+
+        // Notify employee about payroll creation
+        notificationService.createNotification(
+                user.getId(),
+                String.format("💰 Your payroll for %s has been created. Net salary: %.2f",
+                        dto.getMonth(), saved.getNetSalary()),
+                "PAYROLL",
+                user.getId(),
+                saved.getId()
+        );
+
+        // Send email to employee
+        try {
+            int year = Integer.parseInt(dto.getMonth().split("-")[0]);
+            emailService.sendPayrollNotification(user.getEmail(), dto.getMonth(), year);
+            System.out.println("✓ Email sent successfully to: " + user.getEmail());
+        } catch (Exception e) {
+            System.err.println("✗ Email failed for: " + user.getEmail());
+            System.err.println("Error details: " + e.getMessage());
+            e.printStackTrace();
+        }
+
+        return mapToDto(saved);
     }
 
     // ─── Read all ─────────────────────────────────────────────────────────────
@@ -123,7 +159,18 @@ public class PayRollService {
         payroll.setMonth(dto.getMonth());
         payroll.setStatus(dto.getStatus() != null ? dto.getStatus() : payroll.getStatus());
 
-        return mapToDto(payrollRepository.save(payroll));
+        Payroll saved = payrollRepository.save(payroll);
+
+        notificationService.createNotification(
+                payroll.getUser().getId(),
+                String.format("💰 Your payroll for %s has been updated. Net salary: %.2f",
+                        saved.getMonth(), saved.getNetSalary()),
+                "PAYROLL",
+                payroll.getUser().getId(),
+                saved.getId()
+        );
+
+        return mapToDto(saved);
     }
 
     // ─── Delete ───────────────────────────────────────────────────────────────

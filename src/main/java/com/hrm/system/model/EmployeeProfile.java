@@ -29,7 +29,10 @@ public class EmployeeProfile {
     private LocalDate dateOfBirth;
     private LocalDate joiningDate;
     private String cnicNumber;
-    private String profilePicture;       // store file path or URL
+
+    @Column(columnDefinition = "TEXT")
+    private String profilePicture;
+    // store file path or URL
     private String emergencyContactName;
     private String emergencyContactPhone;
 

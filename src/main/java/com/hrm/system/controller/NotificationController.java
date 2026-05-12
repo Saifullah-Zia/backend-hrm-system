@@ -6,14 +6,12 @@ import com.hrm.system.repository.UserRepository;
 import com.hrm.system.service.NotificationService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.web.bind.annotation.*;
 
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
+import java.util.*;
 
 @RestController
 @RequestMapping("/api/notifications")
@@ -28,61 +26,68 @@ public class NotificationController {
 
     private Long getCurrentUserId() {
         try {
-            var authentication = SecurityContextHolder.getContext().getAuthentication();
+            Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
             if (authentication != null && authentication.isAuthenticated()) {
                 Object principal = authentication.getPrincipal();
-                if (principal instanceof UserDetails) {
-                    String username = ((UserDetails) principal).getUsername();
+                String username = null;
 
-                    // Try to find by email first, then by name
+                if (principal instanceof UserDetails userDetails) {
+                    username = userDetails.getUsername();
+                    System.out.println("🔍 Principal is UserDetails, username: " + username);
+                } else if (principal instanceof String) {
+                    username = (String) principal;
+                    System.out.println("🔍 Principal is String, username: " + username);
+                }
+
+                if (username != null) {
+                    // Try finding by email first
                     Optional<User> user = userRepository.findByEmail(username);
                     if (user.isEmpty()) {
+                        System.out.println("🔍 Trying to find by name: " + username);
                         user = userRepository.findByName(username);
                     }
+
                     if (user.isPresent()) {
-                        System.out.println("✅ Found user ID: " + user.get().getId() + " for: " + username);
+                        System.out.println("✅ Found user: " + user.get().getName() + " with ID: " + user.get().getId());
                         return user.get().getId();
+                    } else {
+                        System.err.println("❌ User not found in DB for username: " + username);
                     }
+                } else {
+                    System.err.println("❌ Principal is not UserDetails or String: " + principal);
+                    System.err.println("Principal class: " + (principal != null ? principal.getClass() : "null"));
                 }
+            } else {
+                System.err.println("❌ No authentication found in SecurityContext");
             }
         } catch (Exception e) {
-            System.err.println("Error getting current user: " + e.getMessage());
+            System.err.println("❌ Error getting current user: " + e.getMessage());
+            e.printStackTrace();
         }
 
-        // For testing - return first admin user from database
-        List<User> admins = userRepository.findByRoleIn("ADMIN");
-        if (admins.isEmpty()) {
-            admins = userRepository.findByRoleIn("SUPERADMIN");
-        }
-        if (!admins.isEmpty()) {
-            System.out.println("⚠️ Using default admin user ID: " + admins.get(0).getId());
-            return admins.get(0).getId();
-        }
-
-        // Last resort - return user with ID 1
-        System.out.println("⚠️ Using fallback user ID: 1");
-        return 1L;
+        return null;
     }
 
     @GetMapping
     public ResponseEntity<List<NotificationDto>> getNotifications() {
         Long userId = getCurrentUserId();
         if (userId == null) {
+            System.err.println("❌ Unauthorized access to /api/notifications");
             return ResponseEntity.status(401).build();
         }
-        List<NotificationDto> notifications = notificationService.getNotificationsByUserId(userId);
-        System.out.println("📢 Returning " + notifications.size() + " notifications for user " + userId);
-        return ResponseEntity.ok(notifications);
+        System.out.println("✅ Fetching notifications for userId: " + userId);
+        return ResponseEntity.ok(notificationService.getNotificationsByUserId(userId));
     }
 
     @GetMapping("/unread/count")
     public ResponseEntity<Map<String, Long>> getUnreadCount() {
         Long userId = getCurrentUserId();
         if (userId == null) {
+            System.err.println("❌ Unauthorized access to /api/notifications/unread/count");
             return ResponseEntity.status(401).build();
         }
         Long count = notificationService.getUnreadCount(userId);
-        System.out.println("🔔 Unread count for user " + userId + ": " + count);
+        System.out.println("✅ Unread count for userId " + userId + ": " + count);
         Map<String, Long> response = new HashMap<>();
         response.put("count", count);
         return ResponseEntity.ok(response);
@@ -95,6 +100,7 @@ public class NotificationController {
             return ResponseEntity.status(401).build();
         }
         notificationService.markAsRead(userId, id);
+        System.out.println("✅ Marked notification " + id + " as read for userId: " + userId);
         return ResponseEntity.ok().build();
     }
 
@@ -105,6 +111,7 @@ public class NotificationController {
             return ResponseEntity.status(401).build();
         }
         notificationService.markAllAsRead(userId);
+        System.out.println("✅ Marked all notifications as read for userId: " + userId);
         return ResponseEntity.ok().build();
     }
 }

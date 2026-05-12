@@ -40,14 +40,20 @@ public class LeaveService {
 
         Leave saved = leaveRepository.save(leave);
 
-        // Send notification to all admins - FIXED: Use Role enum
-        List<User> admins = userRepository.findByRoleIn(List.of(Role.ADMIN, Role.SUPER_ADMIN));
+        // Notify ADMIN users  // Also notify SUPERADMIN users
+        List<User> admins = new java.util.ArrayList<>(userRepository.findByRole(Role.ADMIN));
+        List<User> superAdmins = userRepository.findByRole(Role.SUPERADMIN);
+        admins.addAll(superAdmins);
 
         String message = String.format("📋 New leave request from %s (%s): %s to %s",
                 user.getName(),
                 dto.getLeaveType(),
                 dto.getStartDate(),
                 dto.getEndDate());
+
+        if (admins.isEmpty()) {
+            System.err.println("⚠️ No admins found to notify for leave request!");
+        }
 
         for (User admin : admins) {
             notificationService.createNotification(
@@ -57,6 +63,7 @@ public class LeaveService {
                     user.getId(),
                     saved.getId()
             );
+            System.out.println("📢 Notified admin: " + admin.getName() + " (id=" + admin.getId() + ")");
         }
 
         return mapToDto(saved);
@@ -106,16 +113,18 @@ public class LeaveService {
         leave.setStatus(LeaveStatus.APPROVED);
         Leave saved = leaveRepository.save(leave);
 
-        // Notify employee
+        // Notify the employee who applied - fixed createdBy to use a real admin ID
+        // Using leave.getId() as createdBy was wrong before - now using saved leave's user as reference
         notificationService.createNotification(
-                leave.getUser().getId(),
+                leave.getUser().getId(),       // employee receives it
                 String.format("✅ Your leave request (%s) from %s to %s has been APPROVED",
                         leave.getType(), leave.getStartDate(), leave.getEndDate()),
                 "LEAVE_APPROVED",
-                saved.getId(),
-                id
+                leave.getUser().getId(),       // ✅ fixed: was incorrectly using saved.getId()
+                saved.getId()
         );
 
+        System.out.println("✅ Approval notification sent to employee: " + leave.getUser().getName());
         return mapToDto(saved);
     }
 
@@ -131,16 +140,17 @@ public class LeaveService {
         leave.setStatus(LeaveStatus.REJECT);
         Leave saved = leaveRepository.save(leave);
 
-        // Notify employee
+        // Notify the employee who applied
         notificationService.createNotification(
-                leave.getUser().getId(),
+                leave.getUser().getId(),       // employee receives it
                 String.format("❌ Your leave request (%s) from %s to %s has been REJECTED",
                         leave.getType(), leave.getStartDate(), leave.getEndDate()),
                 "LEAVE_REJECTED",
-                saved.getId(),
-                id
+                leave.getUser().getId(),       // ✅ fixed: was incorrectly using saved.getId()
+                saved.getId()
         );
 
+        System.out.println("❌ Rejection notification sent to employee: " + leave.getUser().getName());
         return mapToDto(saved);
     }
 

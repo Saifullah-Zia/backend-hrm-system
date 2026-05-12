@@ -1,5 +1,6 @@
 package com.hrm.system.model;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
@@ -23,7 +24,8 @@ public class Attendance {
     private LocalDateTime checkIn;
     private LocalDateTime checkOut;
 
-    @ManyToOne
+    @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "user_id")
+    @JsonIgnore  // prevents Attendance → User → Attendance loop
     private User user;
 }

@@ -1,4 +1,6 @@
 package com.hrm.system.model;
+
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import jakarta.validation.constraints.NotBlank;
 import lombok.*;
@@ -40,14 +42,17 @@ public class User {
     @Enumerated(EnumType.STRING)
     private Role role;
 
-    // Relationships
+    // Relationships — @JsonIgnore prevents infinite recursion & lazy-load errors
     @OneToMany(mappedBy = "user", cascade = CascadeType.ALL)
+    @JsonIgnore
     private List<Attendance> attendances;
 
     @OneToMany(mappedBy = "user", cascade = CascadeType.ALL)
+    @JsonIgnore
     private List<Leave> leaves;
 
     @OneToMany(mappedBy = "user", cascade = CascadeType.ALL)
+    @JsonIgnore
     private List<Payroll> payrolls;
 
     // Audit fields
