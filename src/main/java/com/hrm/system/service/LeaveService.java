@@ -1,15 +1,17 @@
 package com.hrm.system.service;
 
 import com.hrm.system.dto.LeaveDto;
-import com.hrm.system.model.Leave;
-import com.hrm.system.model.LeaveStatus;
-import com.hrm.system.model.Role;
-import com.hrm.system.model.User;
+import com.hrm.system.model.*;
 import com.hrm.system.repository.LeaveRepository;
+import com.hrm.system.repository.LeavePolicyRepository;
 import com.hrm.system.repository.UserRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDate;
+import java.time.temporal.ChronoUnit;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -23,88 +25,106 @@ public class LeaveService {
     private LeaveRepository leaveRepository;
 
     @Autowired
+    private LeavePolicyRepository leavePolicyRepository;
+
+    @Autowired
+    private LeaveBalanceService leaveBalanceService;
+
+    @Autowired
     private NotificationService notificationService;
 
-    // Apply for leave - sends notification to all admins
+    // ─────────────────────────────────────────────────────────────────────────
+    // Apply for leave
+    // ─────────────────────────────────────────────────────────────────────────
+    @Transactional
     public LeaveDto applyLeave(LeaveDto dto) {
         User user = userRepository.findById(dto.getUserId())
-                .orElseThrow(() -> new RuntimeException("User not found on this ID: " + dto.getUserId()));
+                .orElseThrow(() -> new RuntimeException("User not found: " + dto.getUserId()));
 
-        Leave leave = new Leave();
-        leave.setUser(user);
-        leave.setType(dto.getLeaveType());
-        leave.setStartDate(dto.getStartDate());
-        leave.setEndDate(dto.getEndDate());
-        leave.setReason(dto.getReason());
-        leave.setStatus(LeaveStatus.PENDING);
+        String leaveType = dto.getLeaveType().toUpperCase();
+
+        // ── 1. Load policy ───────────────────────────────────────────────────
+        LeavePolicy policy = leavePolicyRepository.findByLeaveType(leaveType)
+                .orElseThrow(() -> new RuntimeException("Unknown leave type: " + leaveType));
+
+        // ── 2. Date validation ───────────────────────────────────────────────
+        if (dto.getEndDate().isBefore(dto.getStartDate())) {
+            throw new RuntimeException("End date cannot be before start date.");
+        }
+
+        // ── 3. Eid leave: can only apply within [eventDate - applyBeforeDays, eventDate+duration] ─
+        if (policy.getIsPublicHoliday() && policy.getApplyBeforeDays() != null) {
+            LocalDate today = LocalDate.now();
+            LocalDate earliestApplyDate = dto.getStartDate().minusDays(policy.getApplyBeforeDays());
+            if (today.isBefore(earliestApplyDate)) {
+                throw new RuntimeException(
+                        "You can only apply for " + leaveType + " leave up to " +
+                                policy.getApplyBeforeDays() + " day(s) before the leave start date. " +
+                                "Earliest application date: " + earliestApplyDate);
+            }
+        }
+
+        // ── 4. Annual leave: requires 1 year of service ──────────────────────
+        if (policy.getRequiresOneYear()) {
+            if (user.getCreatedAt() == null ||
+                    user.getCreatedAt().plusYears(1).isAfter(LocalDate.now().atStartOfDay())) {
+                throw new RuntimeException(
+                        "You are not eligible for Annual Leave yet. " +
+                                "Annual leave is available after completing 1 year of service.");
+            }
+        }
+
+        // ── 5. Calculate duration ─────────────────────────────────────────────
+        int duration = (int) ChronoUnit.DAYS.between(dto.getStartDate(), dto.getEndDate()) + 1;
+
+        // ── 6. Balance check — throws descriptive error if insufficient ───────
+        leaveBalanceService.validateSufficientBalance(user.getId(), leaveType, duration);
+
+        // ── 7. Persist leave ──────────────────────────────────────────────────
+        Leave leave = Leave.builder()
+                .user(user)
+                .type(leaveType)
+                .startDate(dto.getStartDate())
+                .endDate(dto.getEndDate())
+                .reason(dto.getReason())
+                .status(LeaveStatus.PENDING)
+                .durationDays(duration)
+                .build();
 
         Leave saved = leaveRepository.save(leave);
 
-        // Notify ADMIN users  // Also notify SUPERADMIN users
-        List<User> admins = new java.util.ArrayList<>(userRepository.findByRole(Role.ADMIN));
-        List<User> superAdmins = userRepository.findByRole(Role.SUPERADMIN);
-        admins.addAll(superAdmins);
+        // ── 8. Reserve balance as pending ─────────────────────────────────────
+        leaveBalanceService.reservePendingDays(user.getId(), leaveType, duration);
 
-        String message = String.format("📋 New leave request from %s (%s): %s to %s",
-                user.getName(),
-                dto.getLeaveType(),
-                dto.getStartDate(),
-                dto.getEndDate());
+        // ── 9. Notify all admins & superadmins ───────────────────────────────
+        List<User> admins = new ArrayList<>(userRepository.findByRole(Role.ADMIN));
+        admins.addAll(userRepository.findByRole(Role.SUPERADMIN));
 
-        if (admins.isEmpty()) {
-            System.err.println("⚠️ No admins found to notify for leave request!");
-        }
+        String message = String.format(
+                "📋 New leave request from %s (%s): %s to %s (%d day(s))",
+                user.getName(), leaveType, dto.getStartDate(), dto.getEndDate(), duration);
 
         for (User admin : admins) {
             notificationService.createNotification(
-                    admin.getId(),
-                    message,
-                    "LEAVE_REQUEST",
-                    user.getId(),
-                    saved.getId()
-            );
-            System.out.println("📢 Notified admin: " + admin.getName() + " (id=" + admin.getId() + ")");
+                    admin.getId(), message, "LEAVE_REQUEST", user.getId(), saved.getId());
         }
 
-        return mapToDto(saved);
+        // ── 10. Build response with updated remaining balance ─────────────────
+        int remaining = leaveBalanceService
+                .getBalance(user.getId(), leaveType)
+                .getRemainingDays();
+
+        LeaveDto response = mapToDto(saved);
+        response.setRemainingDaysAfterRequest(remaining);
+        return response;
     }
 
-    // Get all leaves
-    public List<LeaveDto> getAllLeaves() {
-        return leaveRepository.findAll()
-                .stream()
-                .map(this::mapToDto)
-                .collect(Collectors.toList());
-    }
-
-    // Get leave by ID
-    public LeaveDto getLeaveById(Long id) {
-        Leave leave = leaveRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Leave not found on this ID: " + id));
-        return mapToDto(leave);
-    }
-
-    // Get leave by user ID
-    public List<LeaveDto> getLeaveByUserID(Long userId) {
-        return leaveRepository.findByUserId(userId)
-                .stream()
-                .map(this::mapToDto)
-                .collect(Collectors.toList());
-    }
-
-    // Get leave by status
-    public List<LeaveDto> getLeaveByStatus(String status) {
-        LeaveStatus leaveStatus = LeaveStatus.valueOf(status.toUpperCase());
-        List<Leave> results = leaveRepository.findByStatus(leaveStatus);
-        return results.stream()
-                .map(this::mapToDto)
-                .collect(Collectors.toList());
-    }
-
-    // Approve leave
+    // ─────────────────────────────────────────────────────────────────────────
+    // Approve
+    // ─────────────────────────────────────────────────────────────────────────
+    @Transactional
     public LeaveDto approveLeave(Long id) {
-        Leave leave = leaveRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Leave not found on this ID: " + id));
+        Leave leave = findLeaveOrThrow(id);
 
         if (!leave.getStatus().equals(LeaveStatus.PENDING)) {
             throw new RuntimeException("Only PENDING leaves can be approved.");
@@ -113,84 +133,139 @@ public class LeaveService {
         leave.setStatus(LeaveStatus.APPROVED);
         Leave saved = leaveRepository.save(leave);
 
-        // Notify the employee who applied - fixed createdBy to use a real admin ID
-        // Using leave.getId() as createdBy was wrong before - now using saved leave's user as reference
-        notificationService.createNotification(
-                leave.getUser().getId(),       // employee receives it
-                String.format("✅ Your leave request (%s) from %s to %s has been APPROVED",
-                        leave.getType(), leave.getStartDate(), leave.getEndDate()),
-                "LEAVE_APPROVED",
-                leave.getUser().getId(),       // ✅ fixed: was incorrectly using saved.getId()
-                saved.getId()
-        );
+        // Move from pending → used in balance
+        leaveBalanceService.convertPendingToUsed(
+                leave.getUser().getId(), leave.getType(), leave.getDurationDays());
 
-        System.out.println("✅ Approval notification sent to employee: " + leave.getUser().getName());
+        notificationService.createNotification(
+                leave.getUser().getId(),
+                String.format("✅ Your %s leave request (%s to %s) has been APPROVED.",
+                        leave.getType(), leave.getStartDate(), leave.getEndDate()),
+                "LEAVE_APPROVED", leave.getUser().getId(), saved.getId());
+
         return mapToDto(saved);
     }
 
-    // Reject leave
+    // ─────────────────────────────────────────────────────────────────────────
+    // Reject
+    // ─────────────────────────────────────────────────────────────────────────
+    @Transactional
     public LeaveDto rejectLeave(Long id) {
-        Leave leave = leaveRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Leave not found on this ID: " + id));
+        Leave leave = findLeaveOrThrow(id);
 
         if (!leave.getStatus().equals(LeaveStatus.PENDING)) {
-            throw new RuntimeException("Only PENDING leaves can be rejected");
+            throw new RuntimeException("Only PENDING leaves can be rejected.");
         }
 
         leave.setStatus(LeaveStatus.REJECT);
         Leave saved = leaveRepository.save(leave);
 
-        // Notify the employee who applied
-        notificationService.createNotification(
-                leave.getUser().getId(),       // employee receives it
-                String.format("❌ Your leave request (%s) from %s to %s has been REJECTED",
-                        leave.getType(), leave.getStartDate(), leave.getEndDate()),
-                "LEAVE_REJECTED",
-                leave.getUser().getId(),       // ✅ fixed: was incorrectly using saved.getId()
-                saved.getId()
-        );
+        // Release pending days back to available
+        leaveBalanceService.releasePendingDays(
+                leave.getUser().getId(), leave.getType(), leave.getDurationDays());
 
-        System.out.println("❌ Rejection notification sent to employee: " + leave.getUser().getName());
+        notificationService.createNotification(
+                leave.getUser().getId(),
+                String.format("❌ Your %s leave request (%s to %s) has been REJECTED.",
+                        leave.getType(), leave.getStartDate(), leave.getEndDate()),
+                "LEAVE_REJECTED", leave.getUser().getId(), saved.getId());
+
         return mapToDto(saved);
     }
 
-    // Update leave if still pending
+    // ─────────────────────────────────────────────────────────────────────────
+    // Update (only PENDING leaves)
+    // ─────────────────────────────────────────────────────────────────────────
+    @Transactional
     public LeaveDto updateLeave(Long id, LeaveDto dto) {
-        Leave leave = leaveRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Leave not found on this ID: " + id));
+        Leave leave = findLeaveOrThrow(id);
 
-        leave.setType(dto.getLeaveType());
+        if (!leave.getStatus().equals(LeaveStatus.PENDING)) {
+            throw new RuntimeException("Only PENDING leaves can be updated.");
+        }
+
+        String leaveType = dto.getLeaveType().toUpperCase();
+        int newDuration = (int) ChronoUnit.DAYS.between(dto.getStartDate(), dto.getEndDate()) + 1;
+        int oldDuration = leave.getDurationDays();
+
+        // Release old pending days, then validate + reserve new amount
+        leaveBalanceService.releasePendingDays(leave.getUser().getId(), leave.getType(), oldDuration);
+        leaveBalanceService.validateSufficientBalance(leave.getUser().getId(), leaveType, newDuration);
+        leaveBalanceService.reservePendingDays(leave.getUser().getId(), leaveType, newDuration);
+
+        leave.setType(leaveType);
         leave.setStartDate(dto.getStartDate());
         leave.setEndDate(dto.getEndDate());
         leave.setReason(dto.getReason());
-        leave.setStatus(LeaveStatus.PENDING);
+        leave.setDurationDays(newDuration);
 
         return mapToDto(leaveRepository.save(leave));
     }
 
-    // Delete if still pending
+    // ─────────────────────────────────────────────────────────────────────────
+    // Delete (only PENDING)
+    // ─────────────────────────────────────────────────────────────────────────
+    @Transactional
     public void deleteLeave(Long id) {
-        Leave leave = leaveRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Leave not found on this ID: " + id));
+        Leave leave = findLeaveOrThrow(id);
 
         if (!leave.getStatus().equals(LeaveStatus.PENDING)) {
-            throw new RuntimeException("Cannot delete a leave that is already " + leave.getStatus());
+            throw new RuntimeException(
+                    "Cannot delete a leave that is already " + leave.getStatus() + ". " +
+                            "Only PENDING leaves can be withdrawn.");
         }
+
+        leaveBalanceService.releasePendingDays(
+                leave.getUser().getId(), leave.getType(), leave.getDurationDays());
 
         leaveRepository.deleteById(id);
     }
 
-    // Map entity to DTO
+    // ─────────────────────────────────────────────────────────────────────────
+    // Read operations
+    // ─────────────────────────────────────────────────────────────────────────
+    @Transactional(readOnly = true)
+    public List<LeaveDto> getAllLeaves() {
+        return leaveRepository.findAll().stream().map(this::mapToDto).collect(Collectors.toList());
+    }
+
+    @Transactional(readOnly = true)
+    public LeaveDto getLeaveById(Long id) {
+        return mapToDto(findLeaveOrThrow(id));
+    }
+
+    @Transactional(readOnly = true)
+    public List<LeaveDto> getLeaveByUserID(Long userId) {
+        return leaveRepository.findByUserId(userId).stream()
+                .map(this::mapToDto).collect(Collectors.toList());
+    }
+
+    @Transactional(readOnly = true)
+    public List<LeaveDto> getLeaveByStatus(String status) {
+        LeaveStatus leaveStatus = LeaveStatus.valueOf(status.toUpperCase());
+        return leaveRepository.findByStatus(leaveStatus).stream()
+                .map(this::mapToDto).collect(Collectors.toList());
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Helpers
+    // ─────────────────────────────────────────────────────────────────────────
+    private Leave findLeaveOrThrow(Long id) {
+        return leaveRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("Leave not found with id: " + id));
+    }
+
     public LeaveDto mapToDto(Leave leave) {
-        LeaveDto dto = new LeaveDto();
-        dto.setId(leave.getId());
-        dto.setUserId(leave.getUser().getId());
-        dto.setUserName(leave.getUser().getName());
-        dto.setLeaveType(leave.getType());
-        dto.setStartDate(leave.getStartDate());
-        dto.setEndDate(leave.getEndDate());
-        dto.setReason(leave.getReason());
-        dto.setStatus(String.valueOf(leave.getStatus()));
-        return dto;
+        return LeaveDto.builder()
+                .id(leave.getId())
+                .userId(leave.getUser().getId())
+                .userName(leave.getUser().getName())
+                .leaveType(leave.getType())
+                .startDate(leave.getStartDate())
+                .endDate(leave.getEndDate())
+                .reason(leave.getReason())
+                .status(String.valueOf(leave.getStatus()))
+                .durationDays(leave.getDurationDays())
+                .build();
     }
 }

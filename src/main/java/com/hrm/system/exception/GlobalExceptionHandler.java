@@ -11,8 +11,8 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(RuntimeException.class)
     public ResponseEntity<String> handleRuntime(RuntimeException ex) {
-        ex.printStackTrace(); // ← added so we can see the error in Spring console
-        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(ex.getMessage());
+        ex.printStackTrace();
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(ex.getMessage());
     }
 
     @ExceptionHandler(AccessDeniedException.class)

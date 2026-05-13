@@ -3,11 +3,24 @@ package com.hrm.system.repository;
 import com.hrm.system.model.Leave;
 import com.hrm.system.model.LeaveStatus;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import java.util.List;
 
 public interface LeaveRepository extends JpaRepository<Leave, Long> {
+
     List<Leave> findByStatus(LeaveStatus status);
+
     List<Leave> findByUserId(Long userId);
+
+    List<Leave> findByUserIdAndType(Long userId, String type);
+
+    @Query("SELECT l FROM Leave l WHERE l.user.id = :userId AND l.type = :type AND " +
+            "YEAR(l.startDate) = :year AND l.status = :status")
+    List<Leave> findByUserIdAndTypeAndYearAndStatus(
+            @Param("userId") Long userId,
+            @Param("type") String type,
+            @Param("year") int year,
+            @Param("status") LeaveStatus status);
 }

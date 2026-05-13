@@ -11,6 +11,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDate;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -24,10 +25,15 @@ public class UserService implements UserDetailsService {
     @Autowired
     private PasswordEncoder passwordEncoder;
 
+    @Autowired
+    private LeaveBalanceService leaveBalanceService;
+
     // Create a new user
     public UserDTO createUser(User user) {
         user.setPassword(passwordEncoder.encode(user.getPassword()));
         User savedUser = userRepository.save(user);
+        //Auto-initialize leave balances for the new user
+        leaveBalanceService.initializeBalancesForUser(savedUser, LocalDate.now().getYear());
         return convertToDTO(savedUser);
     }
 

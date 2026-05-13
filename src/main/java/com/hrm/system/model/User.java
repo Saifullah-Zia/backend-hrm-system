@@ -36,6 +36,21 @@ public class User {
     @NotBlank
     private String password;
 
+    @Column(nullable = false)
+    private boolean enabled = false;  // false until email verified
+
+    @Column
+    private String verificationCode;  // 6-digit OTP
+
+    @Column
+    private LocalDateTime verificationExpiry;
+
+    @Column
+    private String resetPasswordCode;
+
+    @Column
+    private LocalDateTime resetPasswordExpiry;
+
     @Column(name = "basic_salary")
     private Double basicSalary;
 

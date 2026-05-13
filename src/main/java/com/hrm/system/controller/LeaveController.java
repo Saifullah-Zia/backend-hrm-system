@@ -1,6 +1,8 @@
 package com.hrm.system.controller;
 
+import com.hrm.system.dto.LeaveBalanceDto;
 import com.hrm.system.dto.LeaveDto;
+import com.hrm.system.service.LeaveBalanceService;
 import com.hrm.system.service.LeaveService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
@@ -18,68 +20,78 @@ public class LeaveController {
     @Autowired
     private LeaveService leaveService;
 
-    // Apply leave
+    @Autowired
+    private LeaveBalanceService leaveBalanceService;
+
+    // ── Apply ────────────────────────────────────────────────────────────────
     @PostMapping
     @PreAuthorize("hasRole('SUPERADMIN') or hasRole('ADMIN') or hasRole('EMPLOYEE')")
     public ResponseEntity<LeaveDto> applyLeave(@RequestBody LeaveDto dto) {
-        LeaveDto applied = leaveService.applyLeave(dto);
-        return new ResponseEntity<>(applied, HttpStatus.CREATED);
+        return new ResponseEntity<>(leaveService.applyLeave(dto), HttpStatus.CREATED);
     }
 
-    // Get all leave requests
+    // ── Get all ──────────────────────────────────────────────────────────────
     @GetMapping
     @PreAuthorize("hasRole('SUPERADMIN') or hasRole('ADMIN')")
     public ResponseEntity<List<LeaveDto>> getAllLeave() {
         return ResponseEntity.ok(leaveService.getAllLeaves());
     }
 
-    // Get leave by ID
+    // ── Get by ID ────────────────────────────────────────────────────────────
     @GetMapping("/{id}")
     @PreAuthorize("hasRole('SUPERADMIN') or hasRole('ADMIN') or hasRole('EMPLOYEE')")
     public ResponseEntity<LeaveDto> getLeaveById(@PathVariable Long id) {
         return ResponseEntity.ok(leaveService.getLeaveById(id));
     }
 
-    // Get all leaves by user ID
+    // ── Get by user ──────────────────────────────────────────────────────────
     @GetMapping("/user/{userId}")
     @PreAuthorize("hasRole('SUPERADMIN') or hasRole('ADMIN') or hasRole('EMPLOYEE')")
     public ResponseEntity<List<LeaveDto>> getLeaveByUserId(@PathVariable Long userId) {
         return ResponseEntity.ok(leaveService.getLeaveByUserID(userId));
     }
 
-    // Get leaves filtered by status
+    // ── Get by status ────────────────────────────────────────────────────────
     @GetMapping("/status/{status}")
     @PreAuthorize("hasRole('SUPERADMIN') or hasRole('ADMIN')")
     public ResponseEntity<List<LeaveDto>> getLeaveByStatus(@PathVariable String status) {
         return ResponseEntity.ok(leaveService.getLeaveByStatus(status));
     }
 
-    // Approve leave
+    // ── Approve ──────────────────────────────────────────────────────────────
     @PutMapping("/{id}/approve")
-    @PreAuthorize("hasRole('SUPERADMIN') or hasRole('ADMIN')")  // ✅ fixed syntax
+    @PreAuthorize("hasRole('SUPERADMIN') or hasRole('ADMIN')")
     public ResponseEntity<LeaveDto> approveLeave(@PathVariable Long id) {
         return ResponseEntity.ok(leaveService.approveLeave(id));
     }
 
-    // Reject leave
+    // ── Reject ───────────────────────────────────────────────────────────────
     @PutMapping("/{id}/reject")
-    @PreAuthorize("hasRole('SUPERADMIN') or hasRole('ADMIN')")  // ✅ fixed syntax
+    @PreAuthorize("hasRole('SUPERADMIN') or hasRole('ADMIN')")
     public ResponseEntity<LeaveDto> rejectLeave(@PathVariable Long id) {
         return ResponseEntity.ok(leaveService.rejectLeave(id));
     }
 
-    // Update leave
+    // ── Update ───────────────────────────────────────────────────────────────
     @PutMapping("/{id}")
-    @PreAuthorize("hasRole('SUPERADMIN') or hasRole('ADMIN')")  // ✅ fixed syntax
+    @PreAuthorize("hasRole('SUPERADMIN') or hasRole('ADMIN') or hasRole('EMPLOYEE')")
     public ResponseEntity<LeaveDto> updateLeave(@PathVariable Long id, @RequestBody LeaveDto dto) {
         return ResponseEntity.ok(leaveService.updateLeave(id, dto));
     }
 
-    // Delete leave
+    // ── Delete ───────────────────────────────────────────────────────────────
     @DeleteMapping("/{id}")
     @PreAuthorize("hasRole('SUPERADMIN') or hasRole('ADMIN') or hasRole('EMPLOYEE')")
     public ResponseEntity<String> deleteLeave(@PathVariable Long id) {
         leaveService.deleteLeave(id);
-        return ResponseEntity.ok("Leave request deleted successfully.");
+        return ResponseEntity.ok("Leave request withdrawn successfully.");
+    }
+
+    // ── Shortcut: my balances (pass userId as query param) ───────────────────
+    // Example: GET /api/leave/my-balance?userId=5
+    @GetMapping("/my-balance")
+    @PreAuthorize("hasRole('SUPERADMIN') or hasRole('ADMIN') or hasRole('EMPLOYEE')")
+    public ResponseEntity<List<LeaveBalanceDto>> getMyBalance(@RequestParam Long userId) {
+        return ResponseEntity.ok(leaveBalanceService.getBalancesForUser(userId));
     }
 }

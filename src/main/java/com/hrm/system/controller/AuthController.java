@@ -23,6 +23,33 @@ public class AuthController {
     @Autowired
     private JwtUtil jwtUtil;
 
+    // Verify email OTP
+    @PostMapping("/verify-email")
+    public ResponseEntity<String> verifyEmail(@RequestParam String email,
+                                              @RequestParam String otp) {
+        return ResponseEntity.ok(authService.verifyEmail(email, otp));
+    }
+
+    // Resend OTP
+    @PostMapping("/resend-otp")
+    public ResponseEntity<String> resendOtp(@RequestParam String email) {
+        return ResponseEntity.ok(authService.resendVerificationOtp(email));
+    }
+
+    // Forgot password — sends OTP
+    @PostMapping("/forgot-password")
+    public ResponseEntity<String> forgotPassword(@RequestParam String email) {
+        return ResponseEntity.ok(authService.forgotPassword(email));
+    }
+
+    // Reset password with OTP
+    @PostMapping("/reset-password")
+    public ResponseEntity<String> resetPassword(@RequestParam String email,
+                                                @RequestParam String otp,
+                                                @RequestParam String newPassword) {
+        return ResponseEntity.ok(authService.resetPassword(email, otp, newPassword));
+    }
+
     @PostMapping("/login")
     public ResponseEntity<?> login(@RequestBody LoginRequest request) {
         User user = authService.authenticate(request.getEmail(), request.getPassword());
@@ -45,7 +72,7 @@ public class AuthController {
     }
 
     @PostMapping("/register")
-    public RegisterResponse register(@RequestBody User user) {
+    public String register(@RequestBody User user) {
         return authService.register(user);
     }
 }

@@ -7,22 +7,32 @@ import com.hrm.system.repository.UserRepository;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.util.Random;
+
 @Service
 public class AuthService {
 
     private final UserRepository userRepository;
     private final JwtUtil jwtUtil;
     private final PasswordEncoder passwordEncoder;
+    private final EmailService emailService;
+    private final LeaveBalanceService leaveBalanceService;
 
     public AuthService(UserRepository userRepository,
                        JwtUtil jwtUtil,
-                       PasswordEncoder passwordEncoder) {
+                       PasswordEncoder passwordEncoder,
+                       EmailService emailService,
+                       LeaveBalanceService leaveBalanceService) {
         this.userRepository = userRepository;
         this.jwtUtil = jwtUtil;
         this.passwordEncoder = passwordEncoder;
+        this.emailService = emailService;
+        this.leaveBalanceService = leaveBalanceService;
     }
 
-    // Called by AuthController.login()
+    // ── LOGIN ──────────────────────────────────────────────────────────────
     public User authenticate(String email, String password) {
         User user = userRepository.findByEmail(email)
                 .orElseThrow(() -> new RuntimeException("User not found"));
@@ -31,19 +41,113 @@ public class AuthService {
             throw new RuntimeException("Invalid credentials");
         }
 
-        return user; // Controller builds the token response itself
+        if (!user.isEnabled()) {
+            throw new RuntimeException("Email not verified. Please check your inbox for the OTP.");
+        }
+
+        return user;
     }
 
-    public RegisterResponse register(User user) {
+    // ── REGISTER ───────────────────────────────────────────────────────────
+    public String register(User user) {
+        if (userRepository.findByEmail(user.getEmail()).isPresent()) {
+            throw new RuntimeException("Email already registered.");
+        }
+
+        String otp = generateOtp();
         user.setPassword(passwordEncoder.encode(user.getPassword()));
+        user.setEnabled(false);
+        user.setVerificationCode(otp);
+        user.setVerificationExpiry(LocalDateTime.now().plusMinutes(10));
         userRepository.save(user);
 
-        String token = jwtUtil.generateToken(
-                user.getName(),
-                user.getRole().name(),
-                user.getId(),
-                user.getEmail()
-        );
-        return new RegisterResponse("Registration successful", token);
+        emailService.sendOtp(user.getEmail(), "Verify your account", Integer.parseInt(otp));
+        return "Registration successful. Please check your email for the verification code.";
+    }
+
+    // ── VERIFY EMAIL ───────────────────────────────────────────────────────
+    public String verifyEmail(String email, String otp) {
+        User user = userRepository.findByEmail(email)
+                .orElseThrow(() -> new RuntimeException("User not found"));
+
+        if (user.isEnabled()) {
+            return "Account already verified.";
+        }
+
+        if (!otp.equals(user.getVerificationCode())) {
+            throw new RuntimeException("Invalid verification code.");
+        }
+
+        if (LocalDateTime.now().isAfter(user.getVerificationExpiry())) {
+            throw new RuntimeException("Verification code has expired. Please request a new one.");
+        }
+
+        user.setEnabled(true);
+        user.setVerificationCode(null);
+        user.setVerificationExpiry(null);
+        userRepository.save(user);
+
+        // Initialize leave balances now that account is verified
+        leaveBalanceService.initializeBalancesForUser(user, LocalDate.now().getYear());
+
+        return "Email verified successfully. You can now log in.";
+    }
+
+    // ── RESEND OTP ─────────────────────────────────────────────────────────
+    public String resendVerificationOtp(String email) {
+        User user = userRepository.findByEmail(email)
+                .orElseThrow(() -> new RuntimeException("User not found"));
+
+        if (user.isEnabled()) {
+            throw new RuntimeException("Account already verified.");
+        }
+
+        String otp = generateOtp();
+        user.setVerificationCode(otp);
+        user.setVerificationExpiry(LocalDateTime.now().plusMinutes(10));
+        userRepository.save(user);
+
+        emailService.sendOtp(email, "Verify your account", Integer.parseInt(otp));
+        return "Verification code resent. Please check your email.";
+    }
+
+    // ── FORGOT PASSWORD ────────────────────────────────────────────────────
+    public String forgotPassword(String email) {
+        User user = userRepository.findByEmail(email)
+                .orElseThrow(() -> new RuntimeException("No account found with that email."));
+
+        String otp = generateOtp();
+        user.setResetPasswordCode(otp);
+        user.setResetPasswordExpiry(LocalDateTime.now().plusMinutes(10));
+        userRepository.save(user);
+
+        emailService.sendOtp(email, "Reset your password", Integer.parseInt(otp));
+        return "Password reset code sent to your email.";
+    }
+
+    // ── RESET PASSWORD ─────────────────────────────────────────────────────
+    public String resetPassword(String email, String otp, String newPassword) {
+        User user = userRepository.findByEmail(email)
+                .orElseThrow(() -> new RuntimeException("User not found"));
+
+        if (!otp.equals(user.getResetPasswordCode())) {
+            throw new RuntimeException("Invalid reset code.");
+        }
+
+        if (LocalDateTime.now().isAfter(user.getResetPasswordExpiry())) {
+            throw new RuntimeException("Reset code has expired. Please request a new one.");
+        }
+
+        user.setPassword(passwordEncoder.encode(newPassword));
+        user.setResetPasswordCode(null);
+        user.setResetPasswordExpiry(null);
+        userRepository.save(user);
+
+        return "Password reset successful. You can now log in.";
+    }
+
+    // ── HELPER ─────────────────────────────────────────────────────────────
+    private String generateOtp() {
+        return String.valueOf(100000 + new Random().nextInt(900000));
     }
 }
