@@ -1,12 +1,12 @@
 package com.hrm.system.service;
 
+import jakarta.mail.internet.MimeMessage;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.mail.SimpleMailMessage;
 import org.springframework.mail.javamail.JavaMailSender;
+import org.springframework.mail.javamail.JavaMailSenderImpl;
 import org.springframework.mail.javamail.MimeMessageHelper;
 import org.springframework.stereotype.Service;
-import jakarta.mail.internet.MimeMessage;
 
 @Service
 public class EmailService {
@@ -17,13 +17,30 @@ public class EmailService {
     @Value("${spring.mail.username}")
     private String fromEmail;
 
+    public void sendOtp(String toEmail, String subject, int otp) {
+        try {
+            JavaMailSenderImpl senderImpl = (JavaMailSenderImpl) mailSender;
+            senderImpl.setProtocol("smtps");
 
-    public void sendOtp(String toEmail, String subject, int otp){
-        SimpleMailMessage message = new SimpleMailMessage();
-        message.setTo(toEmail);
-        message.setSubject(subject);
-        message.setText("Your verification code is: " + otp + "\n\nThis code expires in 10 minutes.");
-        mailSender.send(message);
+            MimeMessage message = mailSender.createMimeMessage();
+            MimeMessageHelper helper = new MimeMessageHelper(message, true, "UTF-8");
+
+            helper.setFrom(fromEmail);
+            helper.setTo(toEmail);
+            helper.setSubject(subject);
+            helper.setText(
+                    "Your verification code is: <b>" + otp + "</b><br><br>This code expires in 10 minutes.",
+                    true  // isHtml
+            );
+
+            mailSender.send(message);
+            System.out.println("✓ OTP email sent to: " + toEmail);
+
+        } catch (Exception e) {
+            System.err.println("✗ Failed to send OTP to: " + toEmail);
+            e.printStackTrace();
+            throw new RuntimeException("Email sending failed: " + e.getMessage(), e);
+        }
     }
 
     public void sendPayrollNotification(String toEmail, String month, int year) {
@@ -35,7 +52,6 @@ public class EmailService {
             helper.setTo(toEmail);
             helper.setSubject("Payroll Generated - " + month + " " + year);
 
-            // HTML email template
             String htmlContent = """
                 <!DOCTYPE html>
                 <html>
@@ -67,10 +83,10 @@ public class EmailService {
 
             helper.setText(htmlContent, true);
             mailSender.send(message);
-            System.out.println("✓ Email sent successfully to: " + toEmail);
+            System.out.println("✓ Payroll email sent to: " + toEmail);
 
         } catch (Exception e) {
-            System.err.println("✗ Failed to send email to: " + toEmail);
+            System.err.println("✗ Failed to send payroll email to: " + toEmail);
             e.printStackTrace();
             throw new RuntimeException("Email sending failed: " + e.getMessage(), e);
         }

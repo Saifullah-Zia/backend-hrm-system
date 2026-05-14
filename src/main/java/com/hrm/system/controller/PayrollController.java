@@ -1,15 +1,13 @@
 package com.hrm.system.controller;
 
 import com.hrm.system.dto.PayRollDto;
-import com.hrm.system.repository.PayrollRepository;
 import com.hrm.system.service.PayRollService;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.domain.Page;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
-
-import java.util.List;
 
 @RestController
 @RequestMapping("/api/payroll")
@@ -26,15 +24,20 @@ public class PayrollController {
     }
 
     @GetMapping
-    @PreAuthorize("hasRole('SUPERADMIN') or hasRole('ADMIN')")  //
-    public ResponseEntity<List<PayRollDto>> getAllPayrolls() {
-        return ResponseEntity.ok(payRollService.getAllPayroll());
+    @PreAuthorize("hasRole('SUPERADMIN') or hasRole('ADMIN')")
+    public ResponseEntity<Page<PayRollDto>> getAllPayrolls(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int size) {
+        return ResponseEntity.ok(payRollService.getAllPayroll(page, size));
     }
 
     @GetMapping("/user/{userId}")
     @PreAuthorize("hasRole('SUPERADMIN') or hasRole('ADMIN') or hasRole('EMPLOYEE')")
-    public ResponseEntity<List<PayRollDto>> getPayrollByUserId(@PathVariable Long userId) {
-        return ResponseEntity.ok(payRollService.getPayrollByUserId(userId));
+    public ResponseEntity<Page<PayRollDto>> getPayrollByUserId(
+            @PathVariable Long userId,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int size) {
+        return ResponseEntity.ok(payRollService.getPayrollByUserId(userId, page, size));
     }
 
     @GetMapping("/{id}")
@@ -42,8 +45,6 @@ public class PayrollController {
     public ResponseEntity<PayRollDto> getPayrollById(@PathVariable Long id) {
         return ResponseEntity.ok(payRollService.getPayrollById(id));
     }
-
-
 
     @PutMapping("/{id}")
     @PreAuthorize("hasRole('SUPERADMIN') or hasRole('ADMIN')")

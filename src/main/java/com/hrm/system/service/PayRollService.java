@@ -6,6 +6,10 @@ import com.hrm.system.model.User;
 import com.hrm.system.repository.PayrollRepository;
 import com.hrm.system.repository.UserRepository;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
@@ -63,7 +67,6 @@ public class PayRollService {
                     System.out.println("✓ Email sent successfully to: " + employee.getEmail());
                 } catch (Exception e) {
                     System.err.println("✗ Email failed for: " + employee.getEmail());
-                    System.err.println("Error details: " + e.getMessage());
                     e.printStackTrace();
                 }
             }
@@ -92,7 +95,6 @@ public class PayRollService {
 
         Payroll saved = payrollRepository.save(payroll);
 
-        // Notify employee about payroll creation
         notificationService.createNotification(
                 user.getId(),
                 String.format("💰 Your payroll for %s has been created. Net salary: %.2f",
@@ -102,27 +104,23 @@ public class PayRollService {
                 saved.getId()
         );
 
-        // Send email to employee
         try {
             int year = Integer.parseInt(dto.getMonth().split("-")[0]);
             emailService.sendPayrollNotification(user.getEmail(), dto.getMonth(), year);
             System.out.println("✓ Email sent successfully to: " + user.getEmail());
         } catch (Exception e) {
             System.err.println("✗ Email failed for: " + user.getEmail());
-            System.err.println("Error details: " + e.getMessage());
             e.printStackTrace();
         }
 
         return mapToDto(saved);
     }
 
-    // ─── Read all ─────────────────────────────────────────────────────────────
+    // ─── Read all paginated ───────────────────────────────────────────────────
 
-    public List<PayRollDto> getAllPayroll() {
-        return payrollRepository.findAll()
-                .stream()
-                .map(this::mapToDto)
-                .collect(Collectors.toList());
+    public Page<PayRollDto> getAllPayroll(int page, int size) {
+        Pageable pageable = PageRequest.of(page, size, Sort.by("id").descending());
+        return payrollRepository.findAll(pageable).map(this::mapToDto);
     }
 
     // ─── Read by ID ───────────────────────────────────────────────────────────
@@ -133,13 +131,11 @@ public class PayRollService {
         return mapToDto(payroll);
     }
 
-    // ─── Read by user ID ──────────────────────────────────────────────────────
+    // ─── Read by user ID paginated ────────────────────────────────────────────
 
-    public List<PayRollDto> getPayrollByUserId(Long userId) {
-        return payrollRepository.findByUserId(userId)
-                .stream()
-                .map(this::mapToDto)
-                .collect(Collectors.toList());
+    public Page<PayRollDto> getPayrollByUserId(Long userId, int page, int size) {
+        Pageable pageable = PageRequest.of(page, size, Sort.by("id").descending());
+        return payrollRepository.findByUserId(userId, pageable).map(this::mapToDto);
     }
 
     // ─── Update ───────────────────────────────────────────────────────────────

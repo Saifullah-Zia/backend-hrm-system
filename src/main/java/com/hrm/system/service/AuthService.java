@@ -4,13 +4,16 @@ import com.hrm.system.config.JwtUtil;
 import com.hrm.system.dto.auth.RegisterResponse;
 import com.hrm.system.model.User;
 import com.hrm.system.repository.UserRepository;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.Optional;
 import java.util.Random;
 
+@Slf4j
 @Service
 public class AuthService {
 
@@ -50,8 +53,27 @@ public class AuthService {
 
     // ── REGISTER ───────────────────────────────────────────────────────────
     public String register(User user) {
-        if (userRepository.findByEmail(user.getEmail()).isPresent()) {
-            throw new RuntimeException("Email already registered.");
+        Optional<User> existing = userRepository.findByEmail(user.getEmail());
+
+        if (existing.isPresent()) {
+            if (!existing.get().isEnabled()) {
+                // User registered but never verified — resend OTP instead of rejecting
+                User unverified = existing.get();
+                String otp = generateOtp();
+                unverified.setVerificationCode(otp);
+                unverified.setVerificationExpiry(LocalDateTime.now().plusMinutes(10));
+                userRepository.save(unverified);
+
+                try {
+                    emailService.sendOtp(unverified.getEmail(), "Verify your account", Integer.parseInt(otp));
+                } catch (Exception e) {
+                    log.error("Failed to resend verification email: " + e.getMessage());
+                }
+
+                return "Account already registered but not verified. A new verification code has been sent to your email.";
+            } else {
+                throw new RuntimeException("Email already registered.");
+            }
         }
 
         String otp = generateOtp();
@@ -61,8 +83,10 @@ public class AuthService {
         user.setVerificationExpiry(LocalDateTime.now().plusMinutes(10));
         userRepository.save(user);
 
+        userRepository.save(user);
         emailService.sendOtp(user.getEmail(), "Verify your account", Integer.parseInt(otp));
         return "Registration successful. Please check your email for the verification code.";
+
     }
 
     // ── VERIFY EMAIL ───────────────────────────────────────────────────────
