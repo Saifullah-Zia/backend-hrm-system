@@ -1,3 +1,4 @@
+// EmployeeProfileService.java
 package com.hrm.system.service;
 
 import com.hrm.system.dto.EmployeeProfileDto;
@@ -10,32 +11,28 @@ import com.hrm.system.repository.EmployeeProfileRepository;
 import com.hrm.system.repository.PositionRepository;
 import com.hrm.system.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
-import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpStatus;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.stereotype.Service;
+import org.springframework.web.server.ResponseStatusException;
+
 import java.util.List;
 import java.util.stream.Collectors;
-
-
 
 @Service
 @RequiredArgsConstructor
 public class EmployeeProfileService {
 
-    @Autowired
     private final EmployeeProfileRepository employeeProfileRepository;
-    @Autowired
     private final UserRepository userRepository;
-    @Autowired
     private final DepartmentRepository departmentRepository;
-    @Autowired
     private final PositionRepository positionRepository;
 
-    // Entity DTO
     private EmployeeProfileDto toDto(EmployeeProfile profile) {
         EmployeeProfileDto dto = new EmployeeProfileDto();
         dto.setId(profile.getId());
-        dto.setUserId(profile.getUser() != null
-                ? profile.getUser().getId() : null);
+        dto.setUserId(profile.getUser() != null ? profile.getUser().getId() : null);
         dto.setPhone(profile.getPhone());
         dto.setAddress(profile.getAddress());
         dto.setDateOfBirth(profile.getDateOfBirth());
@@ -44,10 +41,8 @@ public class EmployeeProfileService {
         dto.setProfilePicture(profile.getProfilePicture());
         dto.setEmergencyContactName(profile.getEmergencyContactName());
         dto.setEmergencyContactPhone(profile.getEmergencyContactPhone());
-        dto.setDepartmentId(profile.getDepartment() != null
-                ? profile.getDepartment().getId() : null);
-        dto.setPositionId(profile.getPosition() != null
-                ? profile.getPosition().getId() : null);
+        dto.setDepartmentId(profile.getDepartment() != null ? profile.getDepartment().getId() : null);
+        dto.setPositionId(profile.getPosition() != null ? profile.getPosition().getId() : null);
         dto.setEmploymentStatus(profile.getEmploymentStatus());
         dto.setCreatedAt(profile.getCreatedAt());
         dto.setUpdatedAt(profile.getUpdatedAt());
@@ -56,23 +51,25 @@ public class EmployeeProfileService {
         return dto;
     }
 
-    //  DTO Entity
     private EmployeeProfile toEntity(EmployeeProfileDto dto) {
         EmployeeProfile profile = new EmployeeProfile();
 
         User user = userRepository.findById(dto.getUserId())
-                .orElseThrow(() -> new RuntimeException("User not found"));
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND, "User not found with ID: " + dto.getUserId()));
         profile.setUser(user);
 
         if (dto.getDepartmentId() != null) {
             Department dept = departmentRepository.findById(dto.getDepartmentId())
-                    .orElseThrow(() -> new RuntimeException("Department not found"));
+                    .orElseThrow(() -> new ResponseStatusException(
+                            HttpStatus.NOT_FOUND, "Department not found with ID: " + dto.getDepartmentId()));
             profile.setDepartment(dept);
         }
 
         if (dto.getPositionId() != null) {
             Position position = positionRepository.findById(dto.getPositionId())
-                    .orElseThrow(() -> new RuntimeException("Position not found"));
+                    .orElseThrow(() -> new ResponseStatusException(
+                            HttpStatus.NOT_FOUND, "Position not found with ID: " + dto.getPositionId()));
             profile.setPosition(position);
         }
 
@@ -98,37 +95,58 @@ public class EmployeeProfileService {
 
     public EmployeeProfileDto getById(Long id) {
         EmployeeProfile profile = employeeProfileRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Employee profile not found"));
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND, "Employee profile not found with ID: " + id));
         return toDto(profile);
     }
 
     public EmployeeProfileDto getByUserId(Long userId) {
         EmployeeProfile profile = employeeProfileRepository.findByUserId(userId)
-                .orElseThrow(() -> new RuntimeException("Profile not found for this user"));
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND, "Profile not found for user ID: " + userId));
         return toDto(profile);
     }
 
+    public EmployeeProfileDto getMe() {
+        var auth = SecurityContextHolder.getContext().getAuthentication();
+
+        if (auth == null || !auth.isAuthenticated())
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Not authenticated");
+
+        // auth.getPrincipal() is UserDetails (set in JwtFilter)
+        String email = ((UserDetails) auth.getPrincipal()).getUsername();
+
+        User user = userRepository.findByEmail(email)
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.UNAUTHORIZED, "User not found"));
+
+        return getByUserId(user.getId());
+    }
+
     public EmployeeProfileDto create(EmployeeProfileDto dto) {
-        // check if profile already exists for this user
         if (employeeProfileRepository.findByUserId(dto.getUserId()).isPresent())
-            throw new RuntimeException("Profile already exists for this user");
+            throw new ResponseStatusException(
+                    HttpStatus.CONFLICT, "Profile already exists for user ID: " + dto.getUserId());
         EmployeeProfile profile = toEntity(dto);
         return toDto(employeeProfileRepository.save(profile));
     }
 
     public EmployeeProfileDto update(Long id, EmployeeProfileDto dto) {
         EmployeeProfile profile = employeeProfileRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Employee profile not found"));
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND, "Employee profile not found with ID: " + id));
 
         if (dto.getDepartmentId() != null) {
             Department dept = departmentRepository.findById(dto.getDepartmentId())
-                    .orElseThrow(() -> new RuntimeException("Department not found"));
+                    .orElseThrow(() -> new ResponseStatusException(
+                            HttpStatus.NOT_FOUND, "Department not found with ID: " + dto.getDepartmentId()));
             profile.setDepartment(dept);
         }
 
         if (dto.getPositionId() != null) {
             Position position = positionRepository.findById(dto.getPositionId())
-                    .orElseThrow(() -> new RuntimeException("Position not found"));
+                    .orElseThrow(() -> new ResponseStatusException(
+                            HttpStatus.NOT_FOUND, "Position not found with ID: " + dto.getPositionId()));
             profile.setPosition(position);
         }
 
@@ -147,7 +165,8 @@ public class EmployeeProfileService {
 
     public void delete(Long id) {
         if (!employeeProfileRepository.existsById(id))
-            throw new RuntimeException("Employee profile not found");
+            throw new ResponseStatusException(
+                    HttpStatus.NOT_FOUND, "Employee profile not found with ID: " + id);
         employeeProfileRepository.deleteById(id);
     }
 }

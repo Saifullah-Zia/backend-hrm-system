@@ -1,6 +1,5 @@
 package com.hrm.system.config;
 
-import com.hrm.system.config.JwtUtil;
 import com.hrm.system.service.UserService;
 import io.jsonwebtoken.ExpiredJwtException;
 import io.jsonwebtoken.JwtException;
@@ -38,7 +37,6 @@ public class JwtFilter extends OncePerRequestFilter {
 
         String path = request.getRequestURI();
 
-        // Skip auth endpoints
         if (path.startsWith("/api/auth")) {
             filterChain.doFilter(request, response);
             return;
@@ -53,21 +51,21 @@ public class JwtFilter extends OncePerRequestFilter {
 
                 if (username != null && SecurityContextHolder.getContext().getAuthentication() == null) {
                     if (jwtUtil.validateToken(token)) {
-                        // Load UserDetails
                         UserDetails userDetails = userService.loadUserByUsername(username);
 
-                        // Extract role from token
                         String role = jwtUtil.extractRole(token);
 
-                        // Create authorities with ROLE_ prefix
+                        // ✅ Extract userId from JWT and store in request attribute
+                        Long userId = jwtUtil.extractUserId(token);
+                        request.setAttribute("userId", userId);
+
                         List<SimpleGrantedAuthority> authorities = List.of(
                                 new SimpleGrantedAuthority("ROLE_" + role)
                         );
 
-                        // ✅ Use userDetails as principal (not String)
                         UsernamePasswordAuthenticationToken authToken =
                                 new UsernamePasswordAuthenticationToken(
-                                        userDetails,  // Changed from username to userDetails
+                                        userDetails,
                                         null,
                                         authorities
                                 );
@@ -76,14 +74,21 @@ public class JwtFilter extends OncePerRequestFilter {
                     }
                 }
             }
-        } catch (ExpiredJwtException e) {
-            System.out.println("JWT expired: " + e.getMessage());
-        } catch (JwtException e) {
-            System.out.println("Invalid JWT: " + e.getMessage());
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
 
-        filterChain.doFilter(request, response);
+            filterChain.doFilter(request, response);
+
+        } catch (ExpiredJwtException e) {
+            sendError(response, HttpServletResponse.SC_UNAUTHORIZED, "Token expired. Please log in again.");
+        } catch (JwtException e) {
+            sendError(response, HttpServletResponse.SC_UNAUTHORIZED, "Invalid token.");
+        } catch (Exception e) {
+            sendError(response, HttpServletResponse.SC_INTERNAL_SERVER_ERROR, "Authentication error.");
+        }
+    }
+
+    private void sendError(HttpServletResponse response, int status, String message) throws IOException {
+        response.setStatus(status);
+        response.setContentType("application/json");
+        response.getWriter().write("{\"error\": \"" + message + "\"}");
     }
 }

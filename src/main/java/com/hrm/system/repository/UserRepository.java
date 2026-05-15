@@ -1,5 +1,6 @@
 package com.hrm.system.repository;
 
+import com.hrm.system.model.ProbationStatus;
 import com.hrm.system.model.Role;
 import com.hrm.system.model.User;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -11,4 +12,8 @@ public interface UserRepository extends JpaRepository<User, Long> {
     Optional<User> findByEmail(String email);
     List<User> findByRole(Role role);        // ✅ scalar, not List<Role>
     Optional<User> findByName(String name);
+
+    List<User> findByProbationStatus(ProbationStatus probationStatus);
+    List<User> findByProbationStatusAndProbationNotificationSent(
+            ProbationStatus probationStatus, boolean notificationSent);
 }

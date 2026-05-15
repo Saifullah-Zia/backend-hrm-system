@@ -2,6 +2,8 @@ package com.hrm.system.repository;
 
 import com.hrm.system.model.LeaveBalance;
 import com.hrm.system.model.User;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
@@ -17,6 +19,10 @@ public interface LeaveBalanceRepository extends JpaRepository<LeaveBalance, Long
     List<LeaveBalance> findByUserIdAndYear(Long userId, int year);
 
     List<LeaveBalance> findByYear(int year);
+
+    // ─── Paginated ────────────────────────────────────────────────────────────
+    Page<LeaveBalance> findByUserIdAndYear(Long userId, int year, Pageable pageable);
+    Page<LeaveBalance> findByYear(int year, Pageable pageable);
 
     /** Used during year-end carry-forward processing */
     List<LeaveBalance> findByUserAndYear(User user, int year);

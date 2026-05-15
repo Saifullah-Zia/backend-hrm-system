@@ -6,6 +6,10 @@ import com.hrm.system.model.User;
 import com.hrm.system.repository.LeaveBalanceRepository;
 import com.hrm.system.repository.UserRepository;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -23,21 +27,25 @@ public class LeaveBalanceService {
     @Autowired
     private UserRepository userRepository;
 
-    // ─────────────────────────────────────────────────────────────────────────
-    // Get all balances for a user in the current year
-    // ─────────────────────────────────────────────────────────────────────────
+    // ─── Get all balances for a user in the current year (paginated) ──────────
     @Transactional(readOnly = true)
-    public List<LeaveBalanceDto> getBalancesForUser(Long userId) {
+    public Page<LeaveBalanceDto> getBalancesForUser(Long userId, int page, int size) {
         int year = LocalDate.now().getYear();
-        return leaveBalanceRepository.findByUserIdAndYear(userId, year)
-                .stream()
-                .map(this::mapToDto)
-                .collect(Collectors.toList());
+        Pageable pageable = PageRequest.of(page, size, Sort.by("leaveType").ascending());
+        return leaveBalanceRepository.findByUserIdAndYear(userId, year, pageable)
+                .map(this::mapToDto);
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
-// Initialize leave balances for a user for a given year
-// ─────────────────────────────────────────────────────────────────────────
+    // ─── Admin: get all balances for all users in current year (paginated) ────
+    @Transactional(readOnly = true)
+    public Page<LeaveBalanceDto> getAllBalancesCurrentYear(int page, int size) {
+        int year = LocalDate.now().getYear();
+        Pageable pageable = PageRequest.of(page, size, Sort.by("id").descending());
+        return leaveBalanceRepository.findByYear(year, pageable)
+                .map(this::mapToDto);
+    }
+
+    // ─── Initialize leave balances for a user for a given year ───────────────
     @Transactional
     public void initializeBalancesForUser(User user, int year) {
         Map<String, Integer> defaultDays = Map.of(
@@ -67,7 +75,7 @@ public class LeaveBalanceService {
         }
     }
 
-    // Get a specific balance for user + leaveType + current year
+    // ─── Get a specific balance for user + leaveType + current year ───────────
     @Transactional(readOnly = true)
     public LeaveBalanceDto getBalance(Long userId, String leaveType) {
         int year = LocalDate.now().getYear();
@@ -78,19 +86,7 @@ public class LeaveBalanceService {
         return mapToDto(balance);
     }
 
-    // Admin: get all balances for all users in current year
-    @Transactional(readOnly = true)
-    public List<LeaveBalanceDto> getAllBalancesCurrentYear() {
-        int year = LocalDate.now().getYear();
-        return leaveBalanceRepository.findByYear(year)
-                .stream()
-                .map(this::mapToDto)
-                .collect(Collectors.toList());
-    }
-
-    // ─────────────────────────────────────────────────────────────────────────
-    // Validation helper — used by LeaveService before allowing an application
-    // ─────────────────────────────────────────────────────────────────────────
+    // ─── Validation helper ────────────────────────────────────────────────────
     @Transactional(readOnly = true)
     public void validateSufficientBalance(Long userId, String leaveType, int requestedDays) {
         int year = LocalDate.now().getYear();
@@ -115,16 +111,14 @@ public class LeaveBalanceService {
         }
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
-    // Called by LeaveService on APPLY → reserve as pending
-    // ─────────────────────────────────────────────────────────────────────────
+    // ─── Reserve pending days on APPLY ────────────────────────────────────────
     @Transactional
     public void reservePendingDays(Long userId, String leaveType, int days) {
         int year = LocalDate.now().getYear();
         leaveBalanceRepository.incrementPendingDays(userId, leaveType.toUpperCase(), year, days);
     }
 
-    // Called on APPROVE → convert pending → used
+    // ─── Convert pending → used on APPROVE ───────────────────────────────────
     @Transactional
     public void convertPendingToUsed(Long userId, String leaveType, int days) {
         int year = LocalDate.now().getYear();
@@ -132,23 +126,21 @@ public class LeaveBalanceService {
         leaveBalanceRepository.incrementUsedDays(userId, leaveType.toUpperCase(), year, days);
     }
 
-    // Called on REJECT or CANCEL → release pending days back
+    // ─── Release pending days on REJECT or CANCEL ─────────────────────────────
     @Transactional
     public void releasePendingDays(Long userId, String leaveType, int days) {
         int year = LocalDate.now().getYear();
         leaveBalanceRepository.decrementPendingDays(userId, leaveType.toUpperCase(), year, days);
     }
 
-    // Called when an APPROVED leave is cancelled → refund used days
+    // ─── Refund used days on APPROVED leave cancellation ─────────────────────
     @Transactional
     public void refundUsedDays(Long userId, String leaveType, int days) {
         int year = LocalDate.now().getYear();
         leaveBalanceRepository.decrementUsedDays(userId, leaveType.toUpperCase(), year, days);
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
-    // Mapper
-    // ─────────────────────────────────────────────────────────────────────────
+    // ─── Mapper ───────────────────────────────────────────────────────────────
     public LeaveBalanceDto mapToDto(LeaveBalance lb) {
         return LeaveBalanceDto.builder()
                 .id(lb.getId())

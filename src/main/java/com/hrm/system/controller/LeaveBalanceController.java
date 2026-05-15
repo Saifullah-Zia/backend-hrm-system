@@ -3,11 +3,10 @@ package com.hrm.system.controller;
 import com.hrm.system.dto.LeaveBalanceDto;
 import com.hrm.system.service.LeaveBalanceService;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.domain.Page;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
-
-import java.util.List;
 
 @RestController
 @RequestMapping("/api/leave/balance")
@@ -18,14 +17,16 @@ public class LeaveBalanceController {
     private LeaveBalanceService leaveBalanceService;
 
     /**
-     * GET /api/leave/balance/user/{userId}
-     * Returns all leave type balances for a specific user in the current year.
-     * Employee can see their own; admin can see anyone's.
+     * GET /api/leave/balance/user/{userId}?page=0&size=10
+     * Returns paginated leave type balances for a specific user in the current year.
      */
     @GetMapping("/user/{userId}")
     @PreAuthorize("hasRole('SUPERADMIN') or hasRole('ADMIN') or hasRole('EMPLOYEE')")
-    public ResponseEntity<List<LeaveBalanceDto>> getBalancesForUser(@PathVariable Long userId) {
-        return ResponseEntity.ok(leaveBalanceService.getBalancesForUser(userId));
+    public ResponseEntity<Page<LeaveBalanceDto>> getBalancesForUser(
+            @PathVariable Long userId,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int size) {
+        return ResponseEntity.ok(leaveBalanceService.getBalancesForUser(userId, page, size));
     }
 
     /**
@@ -41,12 +42,14 @@ public class LeaveBalanceController {
     }
 
     /**
-     * GET /api/leave/balance/all
-     * Admin only — returns all users' balances for the current year.
+     * GET /api/leave/balance/all?page=0&size=10
+     * Admin only — returns all users' balances for the current year (paginated).
      */
     @GetMapping("/all")
     @PreAuthorize("hasRole('SUPERADMIN') or hasRole('ADMIN')")
-    public ResponseEntity<List<LeaveBalanceDto>> getAllBalances() {
-        return ResponseEntity.ok(leaveBalanceService.getAllBalancesCurrentYear());
+    public ResponseEntity<Page<LeaveBalanceDto>> getAllBalances(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int size) {
+        return ResponseEntity.ok(leaveBalanceService.getAllBalancesCurrentYear(page, size));
     }
 }

@@ -22,17 +22,19 @@ public class AuthService {
     private final PasswordEncoder passwordEncoder;
     private final EmailService emailService;
     private final LeaveBalanceService leaveBalanceService;
+    private final ProbationService probationService ;
 
     public AuthService(UserRepository userRepository,
                        JwtUtil jwtUtil,
                        PasswordEncoder passwordEncoder,
                        EmailService emailService,
-                       LeaveBalanceService leaveBalanceService) {
+                       LeaveBalanceService leaveBalanceService, ProbationService probationService) {
         this.userRepository = userRepository;
         this.jwtUtil = jwtUtil;
         this.passwordEncoder = passwordEncoder;
         this.emailService = emailService;
         this.leaveBalanceService = leaveBalanceService;
+        this.probationService = probationService;
     }
 
     // ── LOGIN ──────────────────────────────────────────────────────────────
@@ -113,7 +115,7 @@ public class AuthService {
 
         // Initialize leave balances now that account is verified
         leaveBalanceService.initializeBalancesForUser(user, LocalDate.now().getYear());
-
+        probationService.startProbation(user);
         return "Email verified successfully. You can now log in.";
     }
 
@@ -170,7 +172,7 @@ public class AuthService {
         return "Password reset successful. You can now log in.";
     }
 
-    // ── HELPER ─────────────────────────────────────────────────────────────
+    //helper
     private String generateOtp() {
         return String.valueOf(100000 + new Random().nextInt(900000));
     }

@@ -5,6 +5,7 @@ import com.hrm.system.service.EmployeeProfileService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 import java.util.List;
 
@@ -40,6 +41,7 @@ public class EmployeeProfileController {
     }
 
     @PutMapping("/{id}")
+    @PreAuthorize("hasAnyRole('ADMIN')")
     public ResponseEntity<EmployeeProfileDto> update(
             @PathVariable Long id,
             @Valid @RequestBody EmployeeProfileDto dto) {
@@ -47,8 +49,15 @@ public class EmployeeProfileController {
     }
 
     @DeleteMapping("/{id}")
+    @PreAuthorize("hasAnyRole('ADMIN')")
     public ResponseEntity<String> delete(@PathVariable Long id) {
         employeeProfileService.delete(id);
         return ResponseEntity.ok("Employee profile deleted successfully");
+    }
+
+    @GetMapping("/me")
+    @PreAuthorize("hasAnyRole('EMPLOYEE', 'ADMIN')")
+    public ResponseEntity<EmployeeProfileDto> getMyProfile() {
+        return ResponseEntity.ok(employeeProfileService.getMe());
     }
 }

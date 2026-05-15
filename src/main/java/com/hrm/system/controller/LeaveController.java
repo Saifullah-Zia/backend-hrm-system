@@ -5,6 +5,7 @@ import com.hrm.system.dto.LeaveDto;
 import com.hrm.system.service.LeaveBalanceService;
 import com.hrm.system.service.LeaveService;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.domain.Page;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -91,7 +92,10 @@ public class LeaveController {
     // Example: GET /api/leave/my-balance?userId=5
     @GetMapping("/my-balance")
     @PreAuthorize("hasRole('SUPERADMIN') or hasRole('ADMIN') or hasRole('EMPLOYEE')")
-    public ResponseEntity<List<LeaveBalanceDto>> getMyBalance(@RequestParam Long userId) {
-        return ResponseEntity.ok(leaveBalanceService.getBalancesForUser(userId));
+    public ResponseEntity<Page<LeaveBalanceDto>> getMyBalance(
+            @RequestParam Long userId,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int size) {
+        return ResponseEntity.ok(leaveBalanceService.getBalancesForUser(userId, page, size));
     }
 }

@@ -58,6 +58,17 @@ public class JwtUtil {
                 .get("role", String.class);
     }
 
+    //extract userId stored in JWT claims
+    public Long extractUserId(String token) {
+        Object userId = Jwts.parserBuilder()
+                .setSigningKey(getSigningKey())
+                .build()
+                .parseClaimsJws(token)
+                .getBody()
+                .get("userId");
+        return Long.valueOf(userId.toString());
+    }
+
     public boolean validateToken(String token) {
         try {
             Jwts.parserBuilder()

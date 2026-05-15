@@ -10,6 +10,7 @@ import org.springframework.data.annotation.CreatedBy;
 import org.springframework.data.annotation.LastModifiedBy;
 import org.springframework.data.jpa.domain.support.AuditingEntityListener;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 
@@ -69,6 +70,20 @@ public class User {
     @OneToMany(mappedBy = "user", cascade = CascadeType.ALL)
     @JsonIgnore
     private List<Payroll> payrolls;
+
+    // ─── Probation fields ─────────────────────────────────────────────────
+    @Column
+    private LocalDate probationStartDate;
+
+    @Column
+    private LocalDate probationEndDate;
+
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = true)
+    private ProbationStatus probationStatus;
+
+    @Column(columnDefinition = "boolean default false")
+    private Boolean probationNotificationSent = false;
 
     // Audit fields
     @CreatedDate
