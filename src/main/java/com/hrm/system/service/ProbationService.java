@@ -1,17 +1,18 @@
 package com.hrm.system.service;
 
+import com.hrm.system.dto.ProbationDto;
 import com.hrm.system.model.ProbationStatus;
 import com.hrm.system.model.Role;
 import com.hrm.system.model.User;
 import com.hrm.system.repository.UserRepository;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.webmvc.autoconfigure.WebMvcProperties;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.util.List;
+import java.util.stream.Collectors;
 
 @Service
 public class ProbationService {
@@ -22,7 +23,52 @@ public class ProbationService {
     @Autowired
     private NotificationService notificationService;
 
+    // ─────────────────────────────────────────────────────
+    // MAPPER — User → ProbationDto.Response
+    // ─────────────────────────────────────────────────────
+    private ProbationDto.Response mapToResponse(User user) {
+        return ProbationDto.Response.builder()
+                .userId(user.getId())
+                .name(user.getName())
+                .email(user.getEmail())
+                .probationStatus(user.getProbationStatus())
+                .probationStartDate(user.getProbationStartDate())
+                .probationEndDate(user.getProbationEndDate())
+                .probationNotificationSent(user.getProbationNotificationSent())
+                .createdAt(user.getCreatedAt())
+                .build();
+    }
 
+    // ─────────────────────────────────────────────────────
+    // GET all users ON_PROBATION
+    // ─────────────────────────────────────────────────────
+    public List<ProbationDto.Response> getOnProbation() {
+        return userRepository.findByProbationStatus(ProbationStatus.ON_PROBATION)
+                .stream().map(this::mapToResponse)
+                .collect(Collectors.toList());
+    }
+
+    // ─────────────────────────────────────────────────────
+    // GET all users with COMPLETED probation (awaiting HR confirmation)
+    // ─────────────────────────────────────────────────────
+    public List<ProbationDto.Response> getAwaitingConfirmation() {
+        return userRepository.findByProbationStatus(ProbationStatus.COMPLETED)
+                .stream().map(this::mapToResponse)
+                .collect(Collectors.toList());
+    }
+
+    // ─────────────────────────────────────────────────────
+    // GET all CONFIRMED permanent staff
+    // ─────────────────────────────────────────────────────
+    public List<ProbationDto.Response> getConfirmed() {
+        return userRepository.findByProbationStatus(ProbationStatus.CONFIRMED)
+                .stream().map(this::mapToResponse)
+                .collect(Collectors.toList());
+    }
+
+    // ─────────────────────────────────────────────────────
+    // START probation when employee profile is created
+    // ─────────────────────────────────────────────────────
     @Transactional
     public void startProbation(User user) {
         user.setProbationStartDate(LocalDate.now());
@@ -32,11 +78,12 @@ public class ProbationService {
         userRepository.save(user);
     }
 
-    //Runs every day at midnight to check probation completions
+    // ─────────────────────────────────────────────────────
+    // SCHEDULED — runs every midnight to check completions
+    // ─────────────────────────────────────────────────────
     @Scheduled(cron = "0 0 0 * * *")
     @Transactional
     public void checkProbationCompletions() {
-
         List<User> users = userRepository.findByProbationStatusAndProbationNotificationSent(
                 ProbationStatus.ON_PROBATION, false);
 
@@ -70,14 +117,16 @@ public class ProbationService {
         }
     }
 
-    //HR confirms probation employee becomes permanent
+    // ─────────────────────────────────────────────────────
+    // CONFIRM probation — HR manually confirms permanent staff
+    // ─────────────────────────────────────────────────────
     @Transactional
-    public String confirmProbation(Long userId, Long confirmedByAdminId) {  // ← parameter name here
+    public ProbationDto.Response confirmProbation(Long userId, Long confirmedByAdminId) {
         User user = userRepository.findById(userId)
-                .orElseThrow(() -> new RuntimeException("User not found on this ID " + userId));
+                .orElseThrow(() -> new RuntimeException("User not found with ID: " + userId));
 
         if (user.getProbationStatus() == ProbationStatus.CONFIRMED) {
-            return user.getName() + " is already confirmed as permanent staff.";
+            throw new RuntimeException(user.getName() + " is already confirmed as permanent staff.");
         }
 
         if (user.getProbationStatus() == ProbationStatus.ON_PROBATION) {
@@ -93,14 +142,16 @@ public class ProbationService {
                 user.getId(),
                 "🎉 Congratulations! Your probation period has been completed and you are now confirmed as permanent staff.",
                 "PROBATION",
-                confirmedByAdminId,   // ← must match parameter name exactly
+                confirmedByAdminId,
                 user.getId()
         );
 
-        return user.getName() + " has been confirmed as permanent staff.";
+        return mapToResponse(user);
     }
 
-    //Check if user is on probation
+    // ─────────────────────────────────────────────────────
+    // CHECK if user is on probation
+    // ─────────────────────────────────────────────────────
     public boolean isOnProbation(Long userId) {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new RuntimeException("User not found"));

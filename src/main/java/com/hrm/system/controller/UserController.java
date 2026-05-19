@@ -1,5 +1,6 @@
 package com.hrm.system.controller;
 
+import com.hrm.system.dto.ProbationDto;
 import com.hrm.system.dto.UserDTO;
 import com.hrm.system.model.User;
 import com.hrm.system.service.ProbationService;
@@ -101,12 +102,10 @@ public class UserController {
     // ─── HR confirms probation for an employee ────────────────────────────
     @PutMapping("/{userId}/probation/confirm")
     @PreAuthorize("hasRole('SUPERADMIN') or hasRole('ADMIN')")
-    public ResponseEntity<Map<String, String>> confirmProbation(
+    public ResponseEntity<ProbationDto.Response> confirmProbation(
             @PathVariable Long userId,
             @RequestParam Long confirmedByAdminId) {
-        String result = probationService.confirmProbation(userId, confirmedByAdminId);
-        Map<String, String> response = new HashMap<>();
-        response.put("message", result);
-        return ResponseEntity.ok(response);
+        return ResponseEntity.ok(probationService.confirmProbation(userId, confirmedByAdminId));
     }
+
 }

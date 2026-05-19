@@ -1,20 +1,23 @@
-// EmployeeProfileService.java
 package com.hrm.system.service;
 
 import com.hrm.system.dto.EmployeeProfileDto;
 import com.hrm.system.model.Department;
 import com.hrm.system.model.EmployeeProfile;
 import com.hrm.system.model.Position;
+import com.hrm.system.model.Resignation;
 import com.hrm.system.model.User;
 import com.hrm.system.repository.DepartmentRepository;
 import com.hrm.system.repository.EmployeeProfileRepository;
+import com.hrm.system.repository.OffboardingTaskRepository;
 import com.hrm.system.repository.PositionRepository;
+import com.hrm.system.repository.ResignationRepository;
 import com.hrm.system.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.util.List;
@@ -28,11 +31,19 @@ public class EmployeeProfileService {
     private final UserRepository userRepository;
     private final DepartmentRepository departmentRepository;
     private final PositionRepository positionRepository;
+    private final ResignationRepository resignationRepository;
+    private final OffboardingTaskRepository offboardingTaskRepository;
+    private final ProbationService probationService; // ← ADDED
 
+    // ─────────────────────────────────────────────────────
+    // MAPPER — Entity → DTO
+    // ─────────────────────────────────────────────────────
     private EmployeeProfileDto toDto(EmployeeProfile profile) {
         EmployeeProfileDto dto = new EmployeeProfileDto();
         dto.setId(profile.getId());
         dto.setUserId(profile.getUser() != null ? profile.getUser().getId() : null);
+        dto.setFirstName(profile.getFirstName());
+        dto.setLastName(profile.getLastName());
         dto.setPhone(profile.getPhone());
         dto.setAddress(profile.getAddress());
         dto.setDateOfBirth(profile.getDateOfBirth());
@@ -51,6 +62,9 @@ public class EmployeeProfileService {
         return dto;
     }
 
+    // ─────────────────────────────────────────────────────
+    // MAPPER — DTO → Entity
+    // ─────────────────────────────────────────────────────
     private EmployeeProfile toEntity(EmployeeProfileDto dto) {
         EmployeeProfile profile = new EmployeeProfile();
 
@@ -73,6 +87,8 @@ public class EmployeeProfileService {
             profile.setPosition(position);
         }
 
+        profile.setFirstName(dto.getFirstName());
+        profile.setLastName(dto.getLastName());
         profile.setPhone(dto.getPhone());
         profile.setAddress(dto.getAddress());
         profile.setDateOfBirth(dto.getDateOfBirth());
@@ -86,6 +102,9 @@ public class EmployeeProfileService {
         return profile;
     }
 
+    // ─────────────────────────────────────────────────────
+    // GET ALL
+    // ─────────────────────────────────────────────────────
     public List<EmployeeProfileDto> getAll() {
         return employeeProfileRepository.findAll()
                 .stream()
@@ -93,6 +112,9 @@ public class EmployeeProfileService {
                 .collect(Collectors.toList());
     }
 
+    // ─────────────────────────────────────────────────────
+    // GET BY PROFILE ID
+    // ─────────────────────────────────────────────────────
     public EmployeeProfileDto getById(Long id) {
         EmployeeProfile profile = employeeProfileRepository.findById(id)
                 .orElseThrow(() -> new ResponseStatusException(
@@ -100,6 +122,9 @@ public class EmployeeProfileService {
         return toDto(profile);
     }
 
+    // ─────────────────────────────────────────────────────
+    // GET BY USER ID
+    // ─────────────────────────────────────────────────────
     public EmployeeProfileDto getByUserId(Long userId) {
         EmployeeProfile profile = employeeProfileRepository.findByUserId(userId)
                 .orElseThrow(() -> new ResponseStatusException(
@@ -107,13 +132,15 @@ public class EmployeeProfileService {
         return toDto(profile);
     }
 
+    // ─────────────────────────────────────────────────────
+    // GET CURRENT LOGGED-IN USER'S PROFILE
+    // ─────────────────────────────────────────────────────
     public EmployeeProfileDto getMe() {
         var auth = SecurityContextHolder.getContext().getAuthentication();
 
         if (auth == null || !auth.isAuthenticated())
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Not authenticated");
 
-        // auth.getPrincipal() is UserDetails (set in JwtFilter)
         String email = ((UserDetails) auth.getPrincipal()).getUsername();
 
         User user = userRepository.findByEmail(email)
@@ -123,14 +150,26 @@ public class EmployeeProfileService {
         return getByUserId(user.getId());
     }
 
+    // ─────────────────────────────────────────────────────
+    // CREATE — also starts probation automatically
+    // ─────────────────────────────────────────────────────
     public EmployeeProfileDto create(EmployeeProfileDto dto) {
         if (employeeProfileRepository.findByUserId(dto.getUserId()).isPresent())
             throw new ResponseStatusException(
                     HttpStatus.CONFLICT, "Profile already exists for user ID: " + dto.getUserId());
+
         EmployeeProfile profile = toEntity(dto);
-        return toDto(employeeProfileRepository.save(profile));
+        EmployeeProfile saved = employeeProfileRepository.save(profile);
+
+        // ← START probation automatically when profile is created
+        probationService.startProbation(saved.getUser());
+
+        return toDto(saved);
     }
 
+    // ─────────────────────────────────────────────────────
+    // UPDATE
+    // ─────────────────────────────────────────────────────
     public EmployeeProfileDto update(Long id, EmployeeProfileDto dto) {
         EmployeeProfile profile = employeeProfileRepository.findById(id)
                 .orElseThrow(() -> new ResponseStatusException(
@@ -150,6 +189,9 @@ public class EmployeeProfileService {
             profile.setPosition(position);
         }
 
+        if (dto.getFirstName() != null) profile.setFirstName(dto.getFirstName());
+        if (dto.getLastName()  != null) profile.setLastName(dto.getLastName());
+
         profile.setPhone(dto.getPhone());
         profile.setAddress(dto.getAddress());
         profile.setDateOfBirth(dto.getDateOfBirth());
@@ -163,10 +205,27 @@ public class EmployeeProfileService {
         return toDto(employeeProfileRepository.save(profile));
     }
 
+    // ─────────────────────────────────────────────────────
+    // DELETE — cascades through resignations → offboarding tasks
+    // ─────────────────────────────────────────────────────
+    @Transactional
     public void delete(Long id) {
         if (!employeeProfileRepository.existsById(id))
             throw new ResponseStatusException(
                     HttpStatus.NOT_FOUND, "Employee profile not found with ID: " + id);
+
+        // 1. Find all resignations for this employee
+        List<Resignation> resignations = resignationRepository.findByEmployeeProfile_Id(id);
+
+        // 2. Delete offboarding tasks for each resignation
+        for (Resignation r : resignations) {
+            offboardingTaskRepository.deleteByResignationId(r.getId());
+        }
+
+        // 3. Delete all resignations for this employee
+        resignationRepository.deleteByEmployeeProfile_Id(id);
+
+        // 4. Safe to delete the profile now
         employeeProfileRepository.deleteById(id);
     }
 }

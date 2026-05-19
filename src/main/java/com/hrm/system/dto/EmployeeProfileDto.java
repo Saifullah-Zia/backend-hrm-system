@@ -16,6 +16,8 @@ import java.time.LocalDateTime;
 public class EmployeeProfileDto {
     private Long id;
     private Long userId;
+    private String firstName;
+    private String lastName;
     private String phone;
     private String address;
     private LocalDate dateOfBirth;

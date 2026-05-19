@@ -24,6 +24,13 @@ public class EmployeeProfile {
     @JoinColumn(name = "user_id", unique = true, nullable = false)
     private User user;
 
+    // Added firstName and lastName fields
+    @Column(nullable = false)
+    private String firstName;
+
+    @Column(nullable = false)
+    private String lastName;
+
     private String phone;
     private String address;
     private LocalDate dateOfBirth;
@@ -59,6 +66,4 @@ public class EmployeeProfile {
 
     @LastModifiedBy
     private String updatedBy;
-
-
 }

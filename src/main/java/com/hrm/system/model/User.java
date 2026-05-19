@@ -98,4 +98,5 @@ public class User {
 
     @LastModifiedBy
     private String updatedBy;
+
 }
