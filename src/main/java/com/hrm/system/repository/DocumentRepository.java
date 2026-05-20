@@ -13,28 +13,33 @@ import java.util.Optional;
 
 public interface DocumentRepository extends JpaRepository<Document, Long> {
 
-    // All documents for a specific employee
-    List<Document> findByEmployeeProfileIdAndStatusNot(Long employeeId, DocumentStatus status);
+    @Query("SELECT d FROM Document d JOIN FETCH d.employeeProfile ep LEFT JOIN FETCH d.uploadedBy " +
+            "WHERE ep.id = :employeeId AND d.status != :status")
+    List<Document> findByEmployeeProfileIdAndStatusNot(@Param("employeeId") Long employeeId,
+                                                       @Param("status") DocumentStatus status);
 
-    // Filter by employee + document type
-    List<Document> findByEmployeeProfileIdAndDocumentTypeAndStatusNot(Long employeeId, DocumentType documentType, DocumentStatus status);
+    @Query("SELECT d FROM Document d JOIN FETCH d.employeeProfile ep LEFT JOIN FETCH d.uploadedBy " +
+            "WHERE ep.id = :employeeId AND d.documentType = :documentType AND d.status != :status")
+    List<Document> findByEmployeeProfileIdAndDocumentTypeAndStatusNot(@Param("employeeId") Long employeeId,
+                                                                      @Param("documentType") DocumentType documentType,
+                                                                      @Param("status") DocumentStatus status);
 
-    // All documents of a certain type across all employees
     List<Document> findByDocumentTypeAndStatusNot(DocumentType documentType, DocumentStatus status);
 
-    // Find by id but exclude deleted
-    Optional<Document> findByIdAndStatusNot(Long id, DocumentStatus status);
+    @Query("SELECT d FROM Document d JOIN FETCH d.employeeProfile LEFT JOIN FETCH d.uploadedBy " +
+            "WHERE d.id = :id AND d.status != :status")
+    Optional<Document> findByIdAndStatusNot(@Param("id") Long id, @Param("status") DocumentStatus status);
 
-    // Documents expiring before a given date (for expiry alerts)
-    @Query("SELECT d FROM Document d WHERE d.expiryDate IS NOT NULL " +
-            "AND d.expiryDate <= :threshold AND d.status = 'ACTIVE'")
+    @Query("SELECT d FROM Document d JOIN FETCH d.employeeProfile LEFT JOIN FETCH d.uploadedBy " +
+            "WHERE d.expiryDate IS NOT NULL AND d.expiryDate <= :threshold AND d.status = 'ACTIVE'")
     List<Document> findDocumentsExpiringSoon(@Param("threshold") LocalDateTime threshold);
 
-    // Count documents per employee
     long countByEmployeeProfile_IdAndStatusNot(Long employeeId, DocumentStatus status);
 
-    // Search by title keyword
-    @Query("SELECT d FROM Document d WHERE d.status != 'DELETED' " +
-            "AND LOWER(d.title) LIKE LOWER(CONCAT('%', :keyword, '%'))")
+    @Query("SELECT d FROM Document d JOIN FETCH d.employeeProfile LEFT JOIN FETCH d.uploadedBy " +
+            "WHERE d.status != 'DELETED' AND LOWER(d.title) LIKE LOWER(CONCAT('%', :keyword, '%'))")
     List<Document> searchByTitle(@Param("keyword") String keyword);
+
+    @Query("SELECT d FROM Document d JOIN FETCH d.employeeProfile LEFT JOIN FETCH d.uploadedBy")
+    List<Document> findAllWithAssociations();
 }

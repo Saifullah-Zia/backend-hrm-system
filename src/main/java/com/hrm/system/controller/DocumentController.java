@@ -51,6 +51,12 @@ import java.util.List;
             return ResponseEntity.ok(documentService.getDocumentsByEmployee(employeeId));
         }
 
+    @GetMapping("/all")
+    @PreAuthorize("hasAnyRole('ADMIN', 'SUPERADMIN')")
+    public ResponseEntity<List<DocumentDto.Response>> getAll() {
+        return ResponseEntity.ok(documentService.getAllDocuments());
+    }
+
         // ─────────────────────────────────────────────────────
         // GET /api/documents/employee/{employeeId}/type/{type}
         // Filter documents by type

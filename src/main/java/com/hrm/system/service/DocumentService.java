@@ -13,6 +13,7 @@ import com.hrm.system.repository.EmployeeProfileRepository;
 import com.hrm.system.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
@@ -37,6 +38,7 @@ public class DocumentService {
     // ─────────────────────────────────────────────────────
     // UPLOAD a new document
     // ─────────────────────────────────────────────────────
+    @Transactional
     public DocumentDto.Response uploadDocument(
             DocumentDto.Request request,
             MultipartFile file,
@@ -80,6 +82,7 @@ public class DocumentService {
     // ─────────────────────────────────────────────────────
     // GET all documents for an employee
     // ─────────────────────────────────────────────────────
+    @Transactional(readOnly = true)
     public List<DocumentDto.Response> getDocumentsByEmployee(Long employeeId) {
         return documentRepository
                 .findByEmployeeProfileIdAndStatusNot(employeeId, DocumentStatus.DELETED)
@@ -91,6 +94,7 @@ public class DocumentService {
     // ─────────────────────────────────────────────────────
     // GET documents filtered by type
     // ─────────────────────────────────────────────────────
+    @Transactional(readOnly = true)
     public List<DocumentDto.Response> getDocumentsByType(Long employeeId, DocumentType type) {
         return documentRepository
                 .findByEmployeeProfileIdAndDocumentTypeAndStatusNot(employeeId, type, DocumentStatus.DELETED)
@@ -102,6 +106,7 @@ public class DocumentService {
     // ─────────────────────────────────────────────────────
     // GET single document
     // ─────────────────────────────────────────────────────
+    @Transactional(readOnly = true)
     public DocumentDto.Response getDocumentById(Long id) {
         return mapToResponse(findActiveDocument(id));
     }
@@ -109,14 +114,27 @@ public class DocumentService {
     // ─────────────────────────────────────────────────────
     // DOWNLOAD — return file path for streaming
     // ─────────────────────────────────────────────────────
+    @Transactional(readOnly = true)
     public Path getDocumentFilePath(Long id) {
         Document document = findActiveDocument(id);
         return Paths.get(document.getFilePath());
     }
 
     // ─────────────────────────────────────────────────────
+    // GET all documents
+    // ─────────────────────────────────────────────────────
+    @Transactional(readOnly = true)
+    public List<DocumentDto.Response> getAllDocuments() {
+        return documentRepository.findAllWithAssociations()  // uses JOIN FETCH
+                .stream()
+                .map(this::mapToResponse)
+                .collect(Collectors.toList());
+    }
+
+    // ─────────────────────────────────────────────────────
     // UPDATE document metadata
     // ─────────────────────────────────────────────────────
+    @Transactional
     public DocumentDto.Response updateDocument(Long id, DocumentDto.UpdateRequest request) {
         Document document = findActiveDocument(id);
 
@@ -132,6 +150,7 @@ public class DocumentService {
     // ─────────────────────────────────────────────────────
     // SOFT DELETE
     // ─────────────────────────────────────────────────────
+    @Transactional
     public void deleteDocument(Long id) {
         Document document = findActiveDocument(id);
         document.setStatus(DocumentStatus.DELETED);
@@ -141,6 +160,7 @@ public class DocumentService {
     // ─────────────────────────────────────────────────────
     // SEARCH by title keyword
     // ─────────────────────────────────────────────────────
+    @Transactional(readOnly = true)
     public List<DocumentDto.Response> searchDocuments(String keyword) {
         return documentRepository.searchByTitle(keyword)
                 .stream()
@@ -151,6 +171,7 @@ public class DocumentService {
     // ─────────────────────────────────────────────────────
     // EXPIRY ALERT — documents expiring within N days
     // ─────────────────────────────────────────────────────
+    @Transactional(readOnly = true)
     public List<DocumentDto.Response> getExpiringSoonDocuments(int daysAhead) {
         LocalDateTime threshold = LocalDateTime.now().plusDays(daysAhead);
         return documentRepository.findDocumentsExpiringSoon(threshold)
