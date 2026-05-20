@@ -25,6 +25,9 @@ public class OffboardingTaskService {
     private final OffboardingTaskRepository offboardingTaskRepository;
     private final ResignationRepository resignationRepository;
     private final UserRepository userRepository;
+    private final NotificationService notificationService;
+
+    private static final String NOTIF_TYPE = "OFFBOARDING_TASK";
 
     // ─────────────────────────────────────────────────────
     // CREATE a custom offboarding task
@@ -36,7 +39,6 @@ public class OffboardingTaskService {
                 .orElseThrow(() -> new ResourceNotFoundException(
                         "Resignation not found: " + request.getResignationId()));
 
-        // Get the EmployeeProfile from the resignation
         EmployeeProfile employeeProfile = resignation.getEmployeeProfile();
 
         User assignee = null;
@@ -48,7 +50,7 @@ public class OffboardingTaskService {
 
         OffboardingTask task = OffboardingTask.builder()
                 .resignation(resignation)
-                .employee(employeeProfile)          // EmployeeProfile, not User
+                .employee(employeeProfile)
                 .taskName(request.getTaskName())
                 .taskDescription(request.getTaskDescription())
                 .category(request.getCategory())
@@ -57,12 +59,37 @@ public class OffboardingTaskService {
                 .taskStatus(OffboardingTaskStatus.PENDING)
                 .build();
 
-        return mapToResponse(offboardingTaskRepository.save(task));
+        OffboardingTask saved = offboardingTaskRepository.save(task);
+
+        if (assignee != null) {
+            String employeeName = employeeProfile.getFirstName() + " " + employeeProfile.getLastName();
+            notificationService.createNotification(
+                    assignee.getId(),
+                    "You have been assigned an offboarding task '" + saved.getTaskName()
+                            + "' for employee " + employeeName
+                            + (saved.getDueDate() != null ? ". Due: " + saved.getDueDate() : "") + ".",
+                    NOTIF_TYPE,
+                    employeeProfile.getUser().getId(),
+                    saved.getId()
+            );
+        }
+
+        notificationService.createNotification(
+                employeeProfile.getUser().getId(),
+                "An offboarding task '" + saved.getTaskName() + "' has been created for your exit process"
+                        + (saved.getDueDate() != null ? " (due: " + saved.getDueDate() + ")" : "") + ".",
+                NOTIF_TYPE,
+                employeeProfile.getUser().getId(),
+                saved.getId()
+        );
+
+        return mapToResponse(saved);
     }
 
     // ─────────────────────────────────────────────────────
     // GET all tasks for a resignation
     // ─────────────────────────────────────────────────────
+    @Transactional(readOnly = true)
     public List<OffboardingTaskDto.Response> getTasksByResignation(Long resignationId) {
         return offboardingTaskRepository.findByResignationId(resignationId)
                 .stream().map(this::mapToResponse)
@@ -72,6 +99,7 @@ public class OffboardingTaskService {
     // ─────────────────────────────────────────────────────
     // GET tasks assigned to a user
     // ─────────────────────────────────────────────────────
+    @Transactional(readOnly = true)
     public List<OffboardingTaskDto.Response> getMyPendingTasks(Long userId) {
         return offboardingTaskRepository
                 .findByAssignedToIdAndTaskStatus(userId, OffboardingTaskStatus.PENDING)
@@ -82,6 +110,7 @@ public class OffboardingTaskService {
     // ─────────────────────────────────────────────────────
     // GET overdue tasks
     // ─────────────────────────────────────────────────────
+    @Transactional(readOnly = true)
     public List<OffboardingTaskDto.Response> getOverdueTasks() {
         return offboardingTaskRepository.findOverdueTasks(LocalDate.now())
                 .stream().map(this::mapToResponse)
@@ -89,7 +118,7 @@ public class OffboardingTaskService {
     }
 
     // ─────────────────────────────────────────────────────
-    // UPDATE task status (complete, skip, etc.)
+    // UPDATE task status
     // ─────────────────────────────────────────────────────
     @Transactional
     public OffboardingTaskDto.Response updateTask(Long id, OffboardingTaskDto.UpdateRequest request) {
@@ -97,17 +126,101 @@ public class OffboardingTaskService {
                 .orElseThrow(() -> new ResourceNotFoundException(
                         "Offboarding task not found: " + id));
 
+        OffboardingTaskStatus previousStatus = task.getTaskStatus();
+
         if (request.getTaskStatus()    != null) task.setTaskStatus(request.getTaskStatus());
         if (request.getCompletedDate() != null) task.setCompletedDate(request.getCompletedDate());
         if (request.getRemarks()       != null) task.setRemarks(request.getRemarks());
 
-        // Auto-set completed date if marking as COMPLETED
         if (request.getTaskStatus() == OffboardingTaskStatus.COMPLETED
                 && task.getCompletedDate() == null) {
             task.setCompletedDate(LocalDate.now());
         }
 
-        return mapToResponse(offboardingTaskRepository.save(task));
+        OffboardingTask updated = offboardingTaskRepository.save(task);
+
+        if (request.getTaskStatus() != null && request.getTaskStatus() != previousStatus) {
+            sendStatusChangeNotifications(updated, previousStatus);
+        }
+
+        return mapToResponse(updated);
+    }
+
+    // ─────────────────────────────────────────────────────
+    // PRIVATE — send the right notifications on status change
+    // ─────────────────────────────────────────────────────
+    private void sendStatusChangeNotifications(OffboardingTask task, OffboardingTaskStatus previousStatus) {
+
+        EmployeeProfile employee       = task.getEmployee();
+        User            assignee       = task.getAssignedTo();
+        Long            employeeUserId = (employee != null && employee.getUser() != null)
+                ? employee.getUser().getId() : null;
+        Long            actorId        = assignee != null ? assignee.getId() : employeeUserId;
+
+        switch (task.getTaskStatus()) {
+
+            case COMPLETED -> {
+                String employeeName = employee != null
+                        ? employee.getFirstName() + " " + employee.getLastName() : "Employee";
+
+                if (employeeUserId != null) {
+                    notificationService.createNotification(
+                            employeeUserId,
+                            "Your offboarding task '" + task.getTaskName() + "' has been marked as completed.",
+                            NOTIF_TYPE,
+                            actorId,
+                            task.getId()
+                    );
+                }
+
+                if (assignee != null && !assignee.getId().equals(employeeUserId)) {
+                    notificationService.createNotification(
+                            assignee.getId(),
+                            "Offboarding task '" + task.getTaskName() + "' for " + employeeName
+                                    + " has been marked as completed.",
+                            NOTIF_TYPE,
+                            actorId,
+                            task.getId()
+                    );
+                }
+            }
+
+            case SKIPPED -> {
+                if (assignee != null) {
+                    notificationService.createNotification(
+                            assignee.getId(),
+                            "Offboarding task '" + task.getTaskName() + "' has been skipped"
+                                    + (task.getRemarks() != null ? ": " + task.getRemarks() : "") + ".",
+                            NOTIF_TYPE,
+                            actorId,
+                            task.getId()
+                    );
+                }
+                if (employeeUserId != null) {
+                    notificationService.createNotification(
+                            employeeUserId,
+                            "Your offboarding task '" + task.getTaskName() + "' has been skipped.",
+                            NOTIF_TYPE,
+                            actorId,
+                            task.getId()
+                    );
+                }
+            }
+
+            case IN_PROGRESS -> {
+                if (employeeUserId != null) {
+                    notificationService.createNotification(
+                            employeeUserId,
+                            "Your offboarding task '" + task.getTaskName() + "' is now in progress.",
+                            NOTIF_TYPE,
+                            actorId,
+                            task.getId()
+                    );
+                }
+            }
+
+            default -> { }
+        }
     }
 
     // ─────────────────────────────────────────────────────
@@ -119,11 +232,10 @@ public class OffboardingTaskService {
                 && t.getTaskStatus() != OffboardingTaskStatus.COMPLETED
                 && t.getTaskStatus() != OffboardingTaskStatus.SKIPPED;
 
-        // Safely get employee name (null-safe)
         String employeeName = "";
-        Long employeeId = null;
+        Long   employeeId   = null;
         if (t.getEmployee() != null) {
-            employeeId = t.getEmployee().getId();
+            employeeId   = t.getEmployee().getId();
             employeeName = t.getEmployee().getFirstName() + " " + t.getEmployee().getLastName();
         }
 

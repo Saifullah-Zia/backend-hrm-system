@@ -2,6 +2,8 @@ package com.hrm.system.repository;
 
 import com.hrm.system.model.Leave;
 import com.hrm.system.model.LeaveStatus;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -23,4 +25,9 @@ public interface LeaveRepository extends JpaRepository<Leave, Long> {
             @Param("type") String type,
             @Param("year") int year,
             @Param("status") LeaveStatus status);
+
+    @Query("SELECT l FROM Leave l WHERE (:status IS NULL OR l.status = :status)")
+    Page<Leave> findAllPaged(
+            @Param("status") LeaveStatus status,
+            Pageable pageable);
 }

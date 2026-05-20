@@ -4,6 +4,8 @@ import com.hrm.system.dto.AnnouncementDto;
 import com.hrm.system.model.Announcement;
 import com.hrm.system.repository.AnnouncementRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import java.util.List;
 import java.util.stream.Collectors;
@@ -64,5 +66,11 @@ public class AnnouncementService {
         if (!announcementRepository.existsById(id))
             throw new RuntimeException("Announcement not found");
         announcementRepository.deleteById(id);
+    }
+
+    public Page<AnnouncementDto> getPaged(Pageable pageable) {
+        return announcementRepository
+                .findAll(pageable)
+                .map(this::toDto);
     }
 }

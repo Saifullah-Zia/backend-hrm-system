@@ -30,9 +30,20 @@ public class AttendanceController {
         }
     }
 
+    // Original endpoint — unchanged
     @GetMapping
     public ResponseEntity<List<AttendanceDto>> getAllAttendance() {
         return ResponseEntity.ok(attendanceService.getAll());
+    }
+
+    // New paginated endpoint — GET /api/attendance/paged?page=0&size=10&sortBy=date&sortDir=desc
+    @GetMapping("/paged")
+    public ResponseEntity<AttendanceDto.PageResponse> getAllPaginated(
+            @RequestParam(defaultValue = "0")    int page,
+            @RequestParam(defaultValue = "10")   int size,
+            @RequestParam(defaultValue = "date") String sortBy,
+            @RequestParam(defaultValue = "desc") String sortDir) {
+        return ResponseEntity.ok(attendanceService.getAllPaginated(page, size, sortBy, sortDir));
     }
 
     @GetMapping("/{id}")

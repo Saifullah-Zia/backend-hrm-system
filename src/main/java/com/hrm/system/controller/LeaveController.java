@@ -6,6 +6,9 @@ import com.hrm.system.service.LeaveBalanceService;
 import com.hrm.system.service.LeaveService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -88,7 +91,18 @@ public class LeaveController {
         return ResponseEntity.ok("Leave request withdrawn successfully.");
     }
 
-    // ── Shortcut: my balances (pass userId as query param) ───────────────────
+    @GetMapping("/requests/paged")
+    @PreAuthorize("hasRole('SUPERADMIN') or hasRole('ADMIN')")
+    public ResponseEntity<Page<LeaveDto>> getRequestsPaged(
+            @RequestParam(defaultValue = "0")  int page,
+            @RequestParam(defaultValue = "10") int size,
+            @RequestParam(required = false)    String status) {
+
+        Pageable pageable = PageRequest.of(page, size, Sort.by("startDate").descending());
+        return ResponseEntity.ok(leaveService.getPagedRequests(status, pageable));
+    }
+
+    // Shortcut: my balances (pass userId as query param)
     // Example: GET /api/leave/my-balance?userId=5
     @GetMapping("/my-balance")
     @PreAuthorize("hasRole('SUPERADMIN') or hasRole('ADMIN') or hasRole('EMPLOYEE')")

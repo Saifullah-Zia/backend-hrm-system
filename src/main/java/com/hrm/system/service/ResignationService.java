@@ -1,22 +1,21 @@
 package com.hrm.system.service;
+
 import com.hrm.system.dto.ResignationDto;
 import com.hrm.system.enumm.OffboardingTaskCategory;
 import com.hrm.system.enumm.OffboardingTaskStatus;
 import com.hrm.system.enumm.ResignationStatus;
 import com.hrm.system.exception.BadRequestException;
 import com.hrm.system.exception.ResourceNotFoundException;
-import com.hrm.system.model.EmployeeProfile;
-import com.hrm.system.model.OffboardingTask;
-import com.hrm.system.model.Resignation;
-import com.hrm.system.model.User;
+import com.hrm.system.model.*;
 import com.hrm.system.repository.EmployeeProfileRepository;
 import com.hrm.system.repository.OffboardingTaskRepository;
 import com.hrm.system.repository.ResignationRepository;
 import com.hrm.system.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -30,6 +29,9 @@ public class ResignationService {
     private final EmployeeProfileRepository employeeProfileRepository;
     private final UserRepository userRepository;
     private final OffboardingTaskRepository offboardingTaskRepository;
+    private final NotificationService notificationService;
+
+    private static final String NOTIF_TYPE = "RESIGNATION";
 
     // ─────────────────────────────────────────────────────
     // SUBMIT a resignation
@@ -37,19 +39,16 @@ public class ResignationService {
     @Transactional
     public ResignationDto.Response submitResignation(ResignationDto.Request request) {
 
-        // Prevent duplicate active resignations
-        // FIX 1: existsByEmployeeIdAndStatusIn → existsByEmployeeProfile_IdAndStatusIn
         boolean alreadyExists = resignationRepository.existsByEmployeeProfile_IdAndStatusIn(
                 request.getEmployeeId(),
                 List.of(ResignationStatus.PENDING, ResignationStatus.APPROVED));
 
         if (alreadyExists) {
-            throw new BadRequestException(
-                    "Employee already has an active resignation request");
+            throw new BadRequestException("Employee already has an active resignation request");
         }
 
         EmployeeProfile employee = employeeProfileRepository
-                .findById(request.getEmployeeId())
+                .findByIdWithUser(request.getEmployeeId())
                 .orElseThrow(() -> new ResourceNotFoundException(
                         "Employee not found: " + request.getEmployeeId()));
 
@@ -62,12 +61,36 @@ public class ResignationService {
                 .status(ResignationStatus.PENDING)
                 .build();
 
-        return mapToResponse(resignationRepository.save(resignation));
+        Resignation saved = resignationRepository.save(resignation);
+
+        String employeeName   = employee.getFirstName() + " " + employee.getLastName();
+        Long   employeeUserId = getUserId(employee);
+
+        if (employeeUserId != null) {
+            notificationService.createNotification(
+                    employeeUserId,
+                    "Your resignation has been submitted and is pending HR review. Last working day: "
+                            + saved.getLastWorkingDay() + ".",
+                    NOTIF_TYPE,
+                    employeeUserId,
+                    saved.getId()
+            );
+        }
+
+        notifyAllHr(
+                "New resignation submitted by " + employeeName
+                        + ". Last working day: " + saved.getLastWorkingDay() + ".",
+                employeeUserId,
+                saved.getId()
+        );
+
+        return mapToResponse(saved);
     }
 
     // ─────────────────────────────────────────────────────
     // GET all resignations (HR view)
     // ─────────────────────────────────────────────────────
+    @Transactional(readOnly = true)
     public List<ResignationDto.Response> getAllResignations() {
         return resignationRepository.findAll()
                 .stream().map(this::mapToResponse)
@@ -77,6 +100,7 @@ public class ResignationService {
     // ─────────────────────────────────────────────────────
     // GET by status
     // ─────────────────────────────────────────────────────
+    @Transactional(readOnly = true)
     public List<ResignationDto.Response> getByStatus(ResignationStatus status) {
         return resignationRepository.findByStatus(status)
                 .stream().map(this::mapToResponse)
@@ -86,8 +110,8 @@ public class ResignationService {
     // ─────────────────────────────────────────────────────
     // GET by employee
     // ─────────────────────────────────────────────────────
+    @Transactional(readOnly = true)
     public List<ResignationDto.Response> getByEmployee(Long employeeId) {
-        // FIX 2: findByEmployeeId → findByEmployeeProfile_Id
         return resignationRepository.findByEmployeeProfile_Id(employeeId)
                 .stream().map(this::mapToResponse)
                 .collect(Collectors.toList());
@@ -96,6 +120,7 @@ public class ResignationService {
     // ─────────────────────────────────────────────────────
     // GET single resignation
     // ─────────────────────────────────────────────────────
+    @Transactional(readOnly = true)
     public ResignationDto.Response getById(Long id) {
         return mapToResponse(findResignationById(id));
     }
@@ -110,8 +135,7 @@ public class ResignationService {
         Resignation resignation = findResignationById(id);
 
         if (resignation.getStatus() != ResignationStatus.PENDING) {
-            throw new BadRequestException(
-                    "Only PENDING resignations can be approved or rejected");
+            throw new BadRequestException("Only PENDING resignations can be approved or rejected");
         }
 
         User approver = userRepository.findById(approvedByUserId)
@@ -125,12 +149,45 @@ public class ResignationService {
         resignation.setApprovedBy(approver);
         resignation.setApprovedAt(LocalDateTime.now());
 
-        // Auto-generate default offboarding checklist on approval
         if (request.getStatus() == ResignationStatus.APPROVED) {
             generateDefaultOffboardingTasks(resignation);
         }
 
-        return mapToResponse(resignationRepository.save(resignation));
+        Resignation saved = resignationRepository.save(resignation);
+
+        EmployeeProfile emp = employeeProfileRepository
+                .findByIdWithUser(saved.getEmployeeProfile().getId())
+                .orElse(saved.getEmployeeProfile());
+
+        Long   empUserId = getUserId(emp);
+        String empName   = emp.getFirstName() + " " + emp.getLastName();
+
+        if (empUserId != null) {
+            if (request.getStatus() == ResignationStatus.APPROVED) {
+                notificationService.createNotification(
+                        empUserId,
+                        "Your resignation has been approved by HR. Your last working day is "
+                                + saved.getLastWorkingDay()
+                                + ". Please check your offboarding tasks.",
+                        NOTIF_TYPE,
+                        approvedByUserId,
+                        saved.getId()
+                );
+            } else if (request.getStatus() == ResignationStatus.REJECTED) {
+                notificationService.createNotification(
+                        empUserId,
+                        "Your resignation request has been rejected by HR"
+                                + (request.getHrComments() != null
+                                ? ". Reason: " + request.getHrComments()
+                                : "") + ".",
+                        NOTIF_TYPE,
+                        approvedByUserId,
+                        saved.getId()
+                );
+            }
+        }
+
+        return mapToResponse(saved);
     }
 
     // ─────────────────────────────────────────────────────
@@ -147,11 +204,36 @@ public class ResignationService {
         resignation.setStatus(ResignationStatus.WITHDRAWN);
         resignation.setHrComments("Withdrawn by employee. Reason: " + reason);
 
-        return mapToResponse(resignationRepository.save(resignation));
+        Resignation saved = resignationRepository.save(resignation);
+
+        EmployeeProfile emp = employeeProfileRepository
+                .findByIdWithUser(saved.getEmployeeProfile().getId())
+                .orElse(saved.getEmployeeProfile());
+
+        Long   empUserId = getUserId(emp);
+        String empName   = emp.getFirstName() + " " + emp.getLastName();
+
+        if (empUserId != null) {
+            notificationService.createNotification(
+                    empUserId,
+                    "Your resignation has been successfully withdrawn.",
+                    NOTIF_TYPE,
+                    empUserId,
+                    saved.getId()
+            );
+        }
+
+        notifyAllHr(
+                empName + " has withdrawn their resignation.",
+                empUserId,
+                saved.getId()
+        );
+
+        return mapToResponse(saved);
     }
 
     // ─────────────────────────────────────────────────────
-    // COMPLETE offboarding (mark as fully done)
+    // COMPLETE offboarding
     // ─────────────────────────────────────────────────────
     @Transactional
     public ResignationDto.Response completeOffboarding(Long id) {
@@ -168,7 +250,40 @@ public class ResignationService {
         resignation.setStatus(ResignationStatus.COMPLETED);
         resignation.setIsNoticePeriodServed(true);
 
-        return mapToResponse(resignationRepository.save(resignation));
+        Resignation saved = resignationRepository.save(resignation);
+
+        EmployeeProfile emp = employeeProfileRepository
+                .findByIdWithUser(saved.getEmployeeProfile().getId())
+                .orElse(saved.getEmployeeProfile());
+
+        Long   empUserId = getUserId(emp);
+        String empName   = emp.getFirstName() + " " + emp.getLastName();
+
+        if (empUserId != null) {
+            notificationService.createNotification(
+                    empUserId,
+                    "Your offboarding process has been completed. "
+                            + "Thank you for your service. We wish you all the best!",
+                    NOTIF_TYPE,
+                    empUserId,
+                    saved.getId()
+            );
+        }
+
+        notifyAllHr(
+                "Offboarding for " + empName + " has been completed successfully.",
+                empUserId,
+                saved.getId()
+        );
+
+        return mapToResponse(saved);
+    }
+
+    @Transactional(readOnly = true)
+    public Page<ResignationDto.Response> getPaged(ResignationStatus status, Pageable pageable) {
+        return resignationRepository
+                .findAllPaged(status, pageable)
+                .map(this::mapToResponse);
     }
 
     // ─────────────────────────────────────────────────────
@@ -181,41 +296,54 @@ public class ResignationService {
                 buildTask(resignation, "Return Laptop & Accessories",
                         "Collect all IT equipment from employee",
                         OffboardingTaskCategory.IT, lastDay),
-
                 buildTask(resignation, "Revoke System Access",
                         "Disable email, VPN, and all system accounts",
                         OffboardingTaskCategory.IT, lastDay),
-
                 buildTask(resignation, "Conduct Exit Interview",
                         "Schedule and conduct formal exit interview",
                         OffboardingTaskCategory.HR, lastDay),
-
                 buildTask(resignation, "Process Final Settlement",
                         "Calculate and process final salary, leave encashment",
                         OffboardingTaskCategory.FINANCE, lastDay),
-
                 buildTask(resignation, "Collect ID Card & Access Badge",
                         "Retrieve office ID and any access cards",
                         OffboardingTaskCategory.ADMIN, lastDay),
-
                 buildTask(resignation, "Knowledge Transfer",
                         "Ensure all pending work is documented and handed over",
                         OffboardingTaskCategory.MANAGER, lastDay),
-
                 buildTask(resignation, "Issue Experience Letter",
                         "Prepare and issue relieving/experience letter",
                         OffboardingTaskCategory.HR, lastDay),
-
                 buildTask(resignation, "Expense Claims Clearance",
                         "Settle all pending expense reimbursements",
                         OffboardingTaskCategory.FINANCE, lastDay),
-
                 buildTask(resignation, "NDA & IP Reminder",
                         "Send NDA and IP agreement reminders to employee",
                         OffboardingTaskCategory.LEGAL, lastDay)
         );
 
         offboardingTaskRepository.saveAll(defaultTasks);
+    }
+
+    // ─────────────────────────────────────────────────────
+    // HELPER — safely get User ID from EmployeeProfile
+    // ─────────────────────────────────────────────────────
+    private Long getUserId(EmployeeProfile emp) {
+        return (emp != null && emp.getUser() != null) ? emp.getUser().getId() : null;
+    }
+
+    // ─────────────────────────────────────────────────────
+    // HELPER — notify all HR/ADMIN users
+    // ─────────────────────────────────────────────────────
+    private void notifyAllHr(String message, Long triggeredByUserId, Long referenceId) {
+        userRepository.findByRole(Role.ADMIN)
+                .forEach(hrUser -> notificationService.createNotification(
+                        hrUser.getId(),
+                        message,
+                        NOTIF_TYPE,
+                        triggeredByUserId,
+                        referenceId
+                ));
     }
 
     // ─────────────────────────────────────────────────────

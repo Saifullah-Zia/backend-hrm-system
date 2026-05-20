@@ -6,6 +6,8 @@ import com.hrm.system.repository.LeaveRepository;
 import com.hrm.system.repository.LeavePolicyRepository;
 import com.hrm.system.repository.UserRepository;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -245,6 +247,14 @@ public class LeaveService {
         LeaveStatus leaveStatus = LeaveStatus.valueOf(status.toUpperCase());
         return leaveRepository.findByStatus(leaveStatus).stream()
                 .map(this::mapToDto).collect(Collectors.toList());
+    }
+
+    @Transactional(readOnly = true)
+    public Page<LeaveDto> getPagedRequests(String statusStr, Pageable pageable) {
+        LeaveStatus status = (statusStr != null) ? LeaveStatus.valueOf(statusStr.toUpperCase()) : null;
+        return leaveRepository
+                .findAllPaged(status, pageable)
+                .map(this::mapToDto);   // replace toDto() with your existing mapper
     }
 
     // ─────────────────────────────────────────────────────────────────────────

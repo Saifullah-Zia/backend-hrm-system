@@ -6,6 +6,7 @@ import lombok.NoArgsConstructor;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.List;
 
 @Data
 @NoArgsConstructor
@@ -18,4 +19,16 @@ public class AttendanceDto {
     private LocalDateTime checkIn;
     private LocalDateTime checkOut;
     private Long userId;
+
+    @Data
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class PageResponse {
+        private List<AttendanceDto> content;
+        private int pageNumber;
+        private int pageSize;
+        private long totalElements;
+        private int totalPages;
+        private boolean last;
+    }
 }

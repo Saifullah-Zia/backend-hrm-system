@@ -6,7 +6,12 @@ import com.hrm.system.model.User;
 import com.hrm.system.repository.AttendanceRepository;
 import com.hrm.system.repository.UserRepository;
 import jakarta.persistence.EntityNotFoundException;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 import java.util.stream.Collectors;
@@ -31,11 +36,37 @@ public class AttendanceService {
         return mapToDto(attendanceRepository.save(attendance));
     }
 
+    // Original — kept for backward compatibility
     public List<AttendanceDto> getAll() {
         return attendanceRepository.findAll()
                 .stream()
                 .map(this::mapToDto)
                 .collect(Collectors.toList());
+    }
+
+    // New  paginated version
+    @Transactional(readOnly = true)
+    public AttendanceDto.PageResponse getAllPaginated(int page, int size, String sortBy, String sortDir) {
+        Sort sort = sortDir.equalsIgnoreCase("desc")
+                ? Sort.by(sortBy).descending()
+                : Sort.by(sortBy).ascending();
+
+        Pageable pageable = PageRequest.of(page, size, sort);
+        Page<Attendance> result = attendanceRepository.findAll(pageable);
+
+        List<AttendanceDto> content = result.getContent()
+                .stream()
+                .map(this::mapToDto)
+                .collect(Collectors.toList());
+
+        return new AttendanceDto.PageResponse(
+                content,
+                result.getNumber(),
+                result.getSize(),
+                result.getTotalElements(),
+                result.getTotalPages(),
+                result.isLast()
+        );
     }
 
     public AttendanceDto getById(Long id) {

@@ -8,6 +8,10 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 import java.util.List;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 
 @RestController
 @RequestMapping("/api/employee-profiles")
@@ -19,6 +23,24 @@ public class EmployeeProfileController {
     @GetMapping
     public ResponseEntity<List<EmployeeProfileDto>> getAll() {
         return ResponseEntity.ok(employeeProfileService.getAll());
+    }
+
+    @GetMapping("/paged")
+    public ResponseEntity<Page<EmployeeProfileDto>> getPaged(
+            @RequestParam(defaultValue = "0")    int page,
+            @RequestParam(defaultValue = "10")   int size,
+            @RequestParam(defaultValue = "firstName") String sortBy,
+            @RequestParam(defaultValue = "asc")  String sortDir,
+            @RequestParam(required = false)      String search,
+            @RequestParam(required = false)      Long departmentId) {
+
+        Sort sort = sortDir.equalsIgnoreCase("desc")
+                ? Sort.by(sortBy).descending()
+                : Sort.by(sortBy).ascending();
+
+        Pageable pageable = PageRequest.of(page, size, sort);
+        return ResponseEntity.ok(
+                employeeProfileService.getPaged(search, departmentId, pageable));
     }
 
     @GetMapping("/{id}")

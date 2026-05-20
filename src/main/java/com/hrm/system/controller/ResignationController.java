@@ -7,6 +7,12 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
+
+
 
         import java.util.List;
 
@@ -26,6 +32,18 @@ public class ResignationController {
     public ResponseEntity<ResignationDto.Response> submit(
             @RequestBody ResignationDto.Request request) {
         return ResponseEntity.ok(resignationService.submitResignation(request));
+    }
+
+    // GET /api/resignations/paged?page=0&size=10&status=PENDING
+    @GetMapping("/paged")
+    @PreAuthorize("hasAnyRole('ADMIN', 'SUPERADMIN')")
+    public ResponseEntity<Page<ResignationDto.Response>> getPaged(
+            @RequestParam(defaultValue = "0")  int page,
+            @RequestParam(defaultValue = "10") int size,
+            @RequestParam(required = false)    ResignationStatus status) {
+
+        Pageable pageable = PageRequest.of(page, size, Sort.by("createdAt").descending());
+        return ResponseEntity.ok(resignationService.getPaged(status, pageable));
     }
 
     // ─────────────────────────────────────────────────────
