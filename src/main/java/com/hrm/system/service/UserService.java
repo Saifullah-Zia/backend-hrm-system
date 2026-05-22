@@ -32,17 +32,14 @@ public class UserService implements UserDetailsService {
     @Autowired
     private ProbationService probationService;
 
-    // ─── Create user ──────────────────────────────────────────────────────
     public UserDTO createUser(User user) {
         user.setPassword(passwordEncoder.encode(user.getPassword()));
         User savedUser = userRepository.save(user);
         leaveBalanceService.initializeBalancesForUser(savedUser, LocalDate.now().getYear());
-        // Start probation for newly created user
         probationService.startProbation(savedUser);
         return convertToDTO(savedUser);
     }
 
-    // ─── Get all users ────────────────────────────────────────────────────
     public List<UserDTO> getAllUsers() {
         return userRepository.findAll()
                 .stream()
@@ -50,21 +47,18 @@ public class UserService implements UserDetailsService {
                 .collect(Collectors.toList());
     }
 
-    // ─── Get user by ID ───────────────────────────────────────────────────
     public UserDTO getUserById(Long id) {
         User user = userRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("User not found with ID " + id));
         return convertToDTO(user);
     }
 
-    // ─── Get user by email ────────────────────────────────────────────────
     public UserDTO getUserByEmail(String email) {
         User user = userRepository.findByEmail(email)
                 .orElseThrow(() -> new RuntimeException("User not found with email " + email));
         return convertToDTO(user);
     }
 
-    // ─── Update user ──────────────────────────────────────────────────────
     public UserDTO updateUser(Long id, User userDetails) {
         User existingUser = userRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("User not found with ID " + id));
@@ -77,18 +71,15 @@ public class UserService implements UserDetailsService {
         }
 
         existingUser.setRole(userDetails.getRole());
-        User updatedUser = userRepository.save(existingUser);
-        return convertToDTO(updatedUser);
+        return convertToDTO(userRepository.save(existingUser));
     }
 
-    // ─── Delete user ──────────────────────────────────────────────────────
     public void deleteUser(Long id) {
         User user = userRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("User not found with ID " + id));
         userRepository.delete(user);
     }
 
-    // ─── Change password ──────────────────────────────────────────────────
     public void changePassword(Long id, String oldPassword, String newPassword) {
         User user = userRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("User not found with ID " + id));
@@ -101,7 +92,6 @@ public class UserService implements UserDetailsService {
         userRepository.save(user);
     }
 
-    // ─── Get users on probation ───────────────────────────────────────────
     public List<UserDTO> getUsersOnProbation() {
         return userRepository.findByProbationStatus(ProbationStatus.ON_PROBATION)
                 .stream()
@@ -109,7 +99,6 @@ public class UserService implements UserDetailsService {
                 .collect(Collectors.toList());
     }
 
-    // ─── Get users with completed probation (pending HR confirmation) ─────
     public List<UserDTO> getUsersPendingProbationConfirmation() {
         return userRepository.findByProbationStatus(ProbationStatus.COMPLETED)
                 .stream()
@@ -117,7 +106,6 @@ public class UserService implements UserDetailsService {
                 .collect(Collectors.toList());
     }
 
-    // ─── Convert Entity → DTO ─────────────────────────────────────────────
     private UserDTO convertToDTO(User user) {
         return new UserDTO(
                 user.getId(),
@@ -130,16 +118,16 @@ public class UserService implements UserDetailsService {
         );
     }
 
-    // ─── Required by Spring Security ─────────────────────────────────────
     @Override
     public UserDetails loadUserByUsername(String username) throws UsernameNotFoundException {
-        User user = userRepository.findByEmail(username)
-                .orElseGet(() -> userRepository.findByName(username)
+        // JWT subject is name — try name first, then email as fallback
+        User user = userRepository.findByName(username)
+                .orElseGet(() -> userRepository.findByEmail(username)
                         .orElseThrow(() -> new UsernameNotFoundException(
-                                "User not found with email or name: " + username)));
+                                "User not found: " + username)));
 
         return org.springframework.security.core.userdetails.User
-                .withUsername(user.getEmail())
+                .withUsername(user.getName())          // must match JWT subject
                 .password(user.getPassword())
                 .authorities("ROLE_" + user.getRole().name())
                 .build();

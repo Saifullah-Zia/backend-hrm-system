@@ -58,6 +58,9 @@ public class User {
     @Enumerated(EnumType.STRING)
     private Role role;
 
+    private String presenceStatus = "offline";
+    private LocalDateTime lastSeenAt;
+
     // Relationships — @JsonIgnore prevents infinite recursion & lazy-load errors
     @OneToMany(mappedBy = "user", cascade = CascadeType.ALL)
     @JsonIgnore
