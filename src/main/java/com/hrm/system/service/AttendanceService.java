@@ -15,10 +15,7 @@ import org.springframework.security.core.Authentication;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.LocalDate;
-import java.time.LocalDateTime;
-import java.time.LocalTime;
-import java.time.ZonedDateTime;
+import java.time.*;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -108,19 +105,11 @@ public class AttendanceService {
 
     @Transactional
     public AttendanceDto checkOut(Long userId) {
-        // Current PKT time
-        ZonedDateTime nowPKT   = ZonedDateTime.now(AppTimeZone.PKT);
+        ZonedDateTime nowPKT   = ZonedDateTime.now(ZoneId.of("Asia/Karachi"));
         LocalDate     todayPKT = nowPKT.toLocalDate();
 
-        // For overnight shift: if it's past midnight (00:00–02:00),
-        // checkout belongs to yesterday's record
-        LocalDate lookupDate = todayPKT;
-        if (nowPKT.toLocalTime().isBefore(LocalTime.of(6, 0))) {
-            lookupDate = todayPKT.minusDays(1);
-        }
-
         Attendance attendance = attendanceRepository
-                .findByUserIdAndDate(userId, lookupDate)
+                .findByUserIdAndDate(userId, todayPKT)
                 .orElseThrow(() -> new EntityNotFoundException(
                         "No check-in found for today. Please check in first."));
 
@@ -128,7 +117,7 @@ public class AttendanceService {
             throw new IllegalStateException("Already checked out today");
         }
 
-        attendance.setCheckOut(nowPKT.toLocalDateTime()); // stored as PKT
+        attendance.setCheckOut(nowPKT.toLocalDateTime());
         return mapToDto(attendanceRepository.save(attendance));
     }
 
