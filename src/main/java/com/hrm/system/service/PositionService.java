@@ -2,11 +2,14 @@ package com.hrm.system.service;
 
 import com.hrm.system.dto.PositionDto;
 import com.hrm.system.model.Department;
+import com.hrm.system.model.EmployeeProfile;
 import com.hrm.system.model.Position;
 import com.hrm.system.repository.DepartmentRepository;
+import com.hrm.system.repository.EmployeeProfileRepository;
 import com.hrm.system.repository.PositionRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 import java.util.stream.Collectors;
@@ -20,6 +23,8 @@ public class PositionService {
     private PositionRepository positionRepository;
     @Autowired
     private DepartmentRepository departmentRepository;
+    @Autowired
+    private EmployeeProfileRepository employeeProfileRepository;
 
     //Entity to Dto
     private PositionDto toDto(Position position) {
@@ -99,11 +104,24 @@ public class PositionService {
     }
 
     //delete department
+    @Transactional
     public void deletePosition(Long id) {
-        if (!positionRepository.existsById(id))
-            throw new RuntimeException("Position not found");
+        Position position = positionRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("Position not found with ID: " + id));
+
+        // Check if any employees are using this position
+        List<EmployeeProfile> assigned = employeeProfileRepository.findByPosition(position);
+        if (!assigned.isEmpty()) {
+            throw new RuntimeException(
+                    "Cannot delete position '" + position.getTitle() + "'. " +
+                            assigned.size() + " employee(s) are currently assigned to it. " +
+                            "Please reassign them first."
+            );
+        }
+
         positionRepository.deleteById(id);
     }
 
-    }
+
+}
 

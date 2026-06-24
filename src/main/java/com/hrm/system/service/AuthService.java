@@ -115,7 +115,7 @@ public class AuthService {
 
         // Initialize leave balances now that account is verified
         leaveBalanceService.initializeBalancesForUser(user, LocalDate.now().getYear());
-        probationService.startProbation(user);
+        probationService.startProbation(user, null);
         return "Email verified successfully. You can now log in.";
     }
 

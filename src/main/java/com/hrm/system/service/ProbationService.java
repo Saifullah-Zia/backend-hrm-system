@@ -23,6 +23,9 @@ public class ProbationService {
     @Autowired
     private NotificationService notificationService;
 
+    @Autowired
+    private EmailService emailService;
+
     // ─────────────────────────────────────────────────────
     // MAPPER — User → ProbationDto.Response
     // ─────────────────────────────────────────────────────
@@ -70,13 +73,19 @@ public class ProbationService {
     // START probation when employee profile is created
     // ─────────────────────────────────────────────────────
     @Transactional
-    public void startProbation(User user) {
-        user.setProbationStartDate(LocalDate.now());
-        user.setProbationEndDate(LocalDate.now().plusMonths(3));
+    public void startProbation(User user, LocalDate joiningDate) { // ✅ Add joiningDate parameter
+        // ✅ Use joiningDate if provided, otherwise fallback to today
+        LocalDate startDate = (joiningDate != null) ? joiningDate : LocalDate.now();
+
+        user.setProbationStartDate(startDate);
+        user.setProbationEndDate(startDate.plusMonths(3)); // Adds 3 months to joining date
         user.setProbationStatus(ProbationStatus.ON_PROBATION);
         user.setProbationNotificationSent(false);
         userRepository.save(user);
     }
+
+
+    // SCHEDULED — runs every midnight to check completions
 
     // ─────────────────────────────────────────────────────
     // SCHEDULED — runs every midnight to check completions
@@ -104,7 +113,10 @@ public class ProbationService {
                         user.getName()
                 );
 
+                String emailSubject = "Action Required: Probation Completed for " + user.getName();
+
                 for (User admin : admins) {
+                    // 1. Dashboard Bell Notification (You already had this)
                     notificationService.createNotification(
                             admin.getId(),
                             message,
@@ -112,10 +124,19 @@ public class ProbationService {
                             user.getId(),
                             user.getId()
                     );
+
+                    // 2. ✅ Send the Email to the Admin
+                    // (Adjust the method name if your EmailService uses sendEmail instead of sendSimpleMessage)
+                    emailService.sendSimpleMessage(
+                            admin.getEmail(),
+                            emailSubject,
+                            message
+                    );
                 }
             }
         }
     }
+
 
     // ─────────────────────────────────────────────────────
     // CONFIRM probation — HR manually confirms permanent staff
@@ -149,9 +170,33 @@ public class ProbationService {
         return mapToResponse(user);
     }
 
-    // ─────────────────────────────────────────────────────
+
+    // UPDATE probation dates when HR edits the profile
+
+    @Transactional
+    public void updateProbation(User user, LocalDate newJoiningDate) {
+        if (newJoiningDate == null || user.getProbationStatus() == ProbationStatus.CONFIRMED) {
+            return;
+        }
+
+        user.setProbationStartDate(newJoiningDate);
+        LocalDate newEndDate = newJoiningDate.plusMonths(3); // Assuming 3 months probation
+        user.setProbationEndDate(newEndDate);
+
+        // If the new end date is in the past, instantly change status to COMPLETED
+        if (!LocalDate.now().isBefore(newEndDate)) {
+            user.setProbationStatus(ProbationStatus.COMPLETED);
+        } else {
+            user.setProbationStatus(ProbationStatus.ON_PROBATION);
+            user.setProbationNotificationSent(false); // Reset notification so it gets sent at midnight when it completes
+        }
+
+        userRepository.save(user);
+    }
+
+
     // CHECK if user is on probation
-    // ─────────────────────────────────────────────────────
+
     public boolean isOnProbation(Long userId) {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new RuntimeException("User not found"));
@@ -159,3 +204,5 @@ public class ProbationService {
                 || user.getProbationStatus() == ProbationStatus.COMPLETED;
     }
 }
+
+

@@ -36,7 +36,7 @@ public class UserService implements UserDetailsService {
         user.setPassword(passwordEncoder.encode(user.getPassword()));
         User savedUser = userRepository.save(user);
         leaveBalanceService.initializeBalancesForUser(savedUser, LocalDate.now().getYear());
-        probationService.startProbation(savedUser);
+        probationService.startProbation(savedUser, null);
         return convertToDTO(savedUser);
     }
 

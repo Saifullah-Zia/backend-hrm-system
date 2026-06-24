@@ -34,11 +34,11 @@ public class EmployeeProfileService {
     private final PositionRepository positionRepository;
     private final ResignationRepository resignationRepository;
     private final OffboardingTaskRepository offboardingTaskRepository;
-    private final ProbationService probationService; // ← ADDED
+    private final ProbationService probationService;
 
-    // ─────────────────────────────────────────────────────
-    // MAPPER — Entity → DTO
-    // ─────────────────────────────────────────────────────
+
+    // MAPPER  Entity DTO
+
     private EmployeeProfileDto toDto(EmployeeProfile profile) {
         EmployeeProfileDto dto = new EmployeeProfileDto();
         dto.setId(profile.getId());
@@ -63,9 +63,9 @@ public class EmployeeProfileService {
         return dto;
     }
 
-    // ─────────────────────────────────────────────────────
-    // MAPPER — DTO → Entity
-    // ─────────────────────────────────────────────────────
+
+    // MAPPER  DTO  Entity
+
     private EmployeeProfile toEntity(EmployeeProfileDto dto) {
         EmployeeProfile profile = new EmployeeProfile();
 
@@ -151,9 +151,10 @@ public class EmployeeProfileService {
         return getByUserId(user.getId());
     }
 
-    // ─────────────────────────────────────────────────────
-    // CREATE — also starts probation automatically
-    // ─────────────────────────────────────────────────────
+
+
+    // CREATE also starts probation automatically
+
     public EmployeeProfileDto create(EmployeeProfileDto dto) {
         if (employeeProfileRepository.findByUserId(dto.getUserId()).isPresent())
             throw new ResponseStatusException(
@@ -162,11 +163,12 @@ public class EmployeeProfileService {
         EmployeeProfile profile = toEntity(dto);
         EmployeeProfile saved = employeeProfileRepository.save(profile);
 
-        // ← START probation automatically when profile is created
-        probationService.startProbation(saved.getUser());
+        // ✅ MODIFIED: Pass the joiningDate to the probation service
+        probationService.startProbation(saved.getUser(), saved.getJoiningDate());
 
         return toDto(saved);
     }
+
 
     // ─────────────────────────────────────────────────────
     // UPDATE
@@ -202,6 +204,7 @@ public class EmployeeProfileService {
         profile.setEmergencyContactName(dto.getEmergencyContactName());
         profile.setEmergencyContactPhone(dto.getEmergencyContactPhone());
         profile.setEmploymentStatus(dto.getEmploymentStatus());
+        probationService.updateProbation(profile.getUser(), dto.getJoiningDate());
 
         return toDto(employeeProfileRepository.save(profile));
     }

@@ -17,6 +17,31 @@ public class EmailService {
     @Value("${spring.mail.username}")
     private String fromEmail;
 
+    // NEW METHOD: Generic method for sending simple text emails
+
+    public void sendSimpleMessage(String toEmail, String subject, String text) {
+        try {
+            MimeMessage message = mailSender.createMimeMessage();
+            MimeMessageHelper helper = new MimeMessageHelper(message, true, "UTF-8");
+
+            helper.setFrom(fromEmail);
+            helper.setTo(toEmail);
+            helper.setSubject(subject);
+            helper.setText(text, false); // false = plain text
+
+            mailSender.send(message);
+            System.out.println("✓ Email sent successfully to: " + toEmail);
+
+        } catch (Exception e) {
+            System.err.println("✗ Failed to send email to: " + toEmail);
+            e.printStackTrace();
+            throw new RuntimeException("Email sending failed: " + e.getMessage(), e);
+        }
+    }
+
+
+    // Send OTP
+
     public void sendOtp(String toEmail, String subject, int otp) {
         try {
             JavaMailSenderImpl senderImpl = (JavaMailSenderImpl) mailSender;
@@ -43,6 +68,9 @@ public class EmailService {
         }
     }
 
+    // ─────────────────────────────────────────────────────
+    // Send Payroll Notification
+    // ─────────────────────────────────────────────────────
     public void sendPayrollNotification(String toEmail, String month, int year) {
         try {
             MimeMessage message = mailSender.createMimeMessage();
