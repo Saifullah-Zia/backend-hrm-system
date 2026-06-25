@@ -45,7 +45,9 @@ public class ProbationService {
     // ─────────────────────────────────────────────────────
     // GET all users ON_PROBATION
     // ─────────────────────────────────────────────────────
+    @Transactional
     public List<ProbationDto.Response> getOnProbation() {
+        updateCompletedProbationsInline();
         return userRepository.findByProbationStatus(ProbationStatus.ON_PROBATION)
                 .stream().map(this::mapToResponse)
                 .collect(Collectors.toList());
@@ -54,7 +56,9 @@ public class ProbationService {
     // ─────────────────────────────────────────────────────
     // GET all users with COMPLETED probation (awaiting HR confirmation)
     // ─────────────────────────────────────────────────────
+    @Transactional
     public List<ProbationDto.Response> getAwaitingConfirmation() {
+        updateCompletedProbationsInline();
         return userRepository.findByProbationStatus(ProbationStatus.COMPLETED)
                 .stream().map(this::mapToResponse)
                 .collect(Collectors.toList());
@@ -84,8 +88,55 @@ public class ProbationService {
         userRepository.save(user);
     }
 
+    // ─────────────────────────────────────────────────────
+    // SELF-HEALING / INLINE UPDATE check for completed probations
+    // ─────────────────────────────────────────────────────
+    @Transactional
+    public void updateCompletedProbationsInline() {
+        List<User> users = userRepository.findByProbationStatus(ProbationStatus.ON_PROBATION);
+        LocalDate today = LocalDate.now();
 
-    // SCHEDULED — runs every midnight to check completions
+        for (User user : users) {
+            if (user.getProbationEndDate() != null && !today.isBefore(user.getProbationEndDate())) {
+                user.setProbationStatus(ProbationStatus.COMPLETED);
+                userRepository.save(user);
+
+                // Send notification only if not already sent
+                if (user.getProbationNotificationSent() == null || !user.getProbationNotificationSent()) {
+                    user.setProbationNotificationSent(true);
+                    userRepository.save(user);
+
+                    try {
+                        List<User> admins = userRepository.findByRole(Role.ADMIN);
+                        String message = String.format(
+                                "🔔 Probation period completed for %s. Please review and confirm their employment status.",
+                                user.getName()
+                        );
+                        String emailSubject = "Action Required: Probation Completed for " + user.getName();
+
+                        for (User admin : admins) {
+                            notificationService.createNotification(
+                                    admin.getId(),
+                                    message,
+                                    "PROBATION",
+                                    user.getId(),
+                                    user.getId()
+                            );
+                            
+                            emailService.sendSimpleMessage(
+                                    admin.getEmail(),
+                                    emailSubject,
+                                    message
+                            );
+                        }
+                    } catch (Exception e) {
+                        System.err.println("Failed to send probation completion notification for " + user.getName());
+                        e.printStackTrace();
+                    }
+                }
+            }
+        }
+    }
 
     // ─────────────────────────────────────────────────────
     // SCHEDULED — runs every midnight to check completions
@@ -93,48 +144,7 @@ public class ProbationService {
     @Scheduled(cron = "0 0 0 * * *")
     @Transactional
     public void checkProbationCompletions() {
-        List<User> users = userRepository.findByProbationStatusAndProbationNotificationSent(
-                ProbationStatus.ON_PROBATION, false);
-
-        LocalDate today = LocalDate.now();
-
-        for (User user : users) {
-            if (user.getProbationEndDate() != null
-                    && !today.isBefore(user.getProbationEndDate())) {
-
-                user.setProbationStatus(ProbationStatus.COMPLETED);
-                user.setProbationNotificationSent(true);
-                userRepository.save(user);
-
-                List<User> admins = userRepository.findByRole(Role.ADMIN);
-
-                String message = String.format(
-                        "🔔 Probation period completed for %s. Please review and confirm their employment status.",
-                        user.getName()
-                );
-
-                String emailSubject = "Action Required: Probation Completed for " + user.getName();
-
-                for (User admin : admins) {
-                    // 1. Dashboard Bell Notification (You already had this)
-                    notificationService.createNotification(
-                            admin.getId(),
-                            message,
-                            "PROBATION",
-                            user.getId(),
-                            user.getId()
-                    );
-
-                    // 2. ✅ Send the Email to the Admin
-                    // (Adjust the method name if your EmailService uses sendEmail instead of sendSimpleMessage)
-                    emailService.sendSimpleMessage(
-                            admin.getEmail(),
-                            emailSubject,
-                            message
-                    );
-                }
-            }
-        }
+        updateCompletedProbationsInline();
     }
 
 
