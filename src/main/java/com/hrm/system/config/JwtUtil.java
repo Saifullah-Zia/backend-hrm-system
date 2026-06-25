@@ -66,7 +66,14 @@ public class JwtUtil {
                 .parseClaimsJws(token)
                 .getBody()
                 .get("userId");
-        return Long.valueOf(userId.toString());
+        if (userId == null) {
+            return null;
+        }
+        try {
+            return Long.valueOf(userId.toString());
+        } catch (NumberFormatException e) {
+            return null;
+        }
     }
 
     public boolean validateToken(String token) {

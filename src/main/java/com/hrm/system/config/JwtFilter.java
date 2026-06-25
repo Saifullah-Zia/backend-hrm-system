@@ -57,7 +57,9 @@ public class JwtFilter extends OncePerRequestFilter {
 
                         // ✅ Extract userId from JWT and store in request attribute
                         Long userId = jwtUtil.extractUserId(token);
-                        request.setAttribute("userId", userId);
+                        if (userId != null) {
+                            request.setAttribute("userId", userId);
+                        }
 
                         List<SimpleGrantedAuthority> authorities = List.of(
                                 new SimpleGrantedAuthority("ROLE_" + role)
@@ -74,16 +76,20 @@ public class JwtFilter extends OncePerRequestFilter {
                     }
                 }
             }
-
-            filterChain.doFilter(request, response);
-
         } catch (ExpiredJwtException e) {
             sendError(response, HttpServletResponse.SC_UNAUTHORIZED, "Token expired. Please log in again.");
+            return;
         } catch (JwtException e) {
             sendError(response, HttpServletResponse.SC_UNAUTHORIZED, "Invalid token.");
+            return;
         } catch (Exception e) {
-            sendError(response, HttpServletResponse.SC_INTERNAL_SERVER_ERROR, "Authentication error.");
+            System.err.println("JWT Filter Error: " + e.getMessage());
+            e.printStackTrace();
+            sendError(response, HttpServletResponse.SC_INTERNAL_SERVER_ERROR, "Authentication error: " + e.getMessage());
+            return;
         }
+
+        filterChain.doFilter(request, response);
     }
 
     private void sendError(HttpServletResponse response, int status, String message) throws IOException {
