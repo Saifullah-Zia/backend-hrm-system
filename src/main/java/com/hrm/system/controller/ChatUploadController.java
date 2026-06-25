@@ -13,6 +13,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.nio.file.StandardCopyOption;
 import java.security.Principal;
 import java.util.Map;
 import java.util.UUID;
@@ -49,8 +50,10 @@ public class ChatUploadController {
                 ? originalName.substring(originalName.lastIndexOf("."))
                 : "";
         String savedFileName = UUID.randomUUID() + extension;
-        Path savedPath = uploadPath.resolve(savedFileName);
-        file.transferTo(savedPath.toFile());
+        Path savedPath = uploadPath.resolve(savedFileName).toAbsolutePath();
+        System.out.println("[ChatUploadController] Saving file to absolute path: " + savedPath);
+        Files.copy(file.getInputStream(), savedPath, StandardCopyOption.REPLACE_EXISTING);
+        System.out.println("[ChatUploadController] File saved successfully!");
 
         String fileUrl = "/api/chat/files/" + savedFileName;
         String displayName = originalName;
