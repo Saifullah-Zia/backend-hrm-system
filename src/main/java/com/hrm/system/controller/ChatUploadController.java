@@ -31,9 +31,10 @@ public class ChatUploadController {
     public ResponseEntity<Map<String, String>> uploadChatFile(
             @PathVariable UUID conversationId,
             @RequestParam("file") MultipartFile file,
+            @RequestParam(value = "caption", required = false) String caption,
             Principal principal) throws IOException {
 
-        System.out.println("[ChatUploadController] uploadChatFile method entered. conversationId: " + conversationId + ", file: " + file.getOriginalFilename() + ", principal: " + (principal != null ? principal.getName() : "null"));
+        System.out.println("[ChatUploadController] uploadChatFile method entered. conversationId: " + conversationId + ", file: " + file.getOriginalFilename() + ", caption: " + caption + ", principal: " + (principal != null ? principal.getName() : "null"));
 
         // Determine type
         String contentType = file.getContentType() != null ? file.getContentType() : "";
@@ -56,7 +57,7 @@ public class ChatUploadController {
         System.out.println("[ChatUploadController] File saved successfully!");
 
         String fileUrl = "/api/chat/files/" + savedFileName;
-        String displayName = originalName;
+        String displayName = (caption != null && !caption.trim().isEmpty()) ? caption.trim() : originalName;
 
         // Save message record
         com.hrm.system.dto.ChatMessageRequest req = new com.hrm.system.dto.ChatMessageRequest(
