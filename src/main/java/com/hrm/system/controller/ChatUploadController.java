@@ -32,6 +32,8 @@ public class ChatUploadController {
             @RequestParam("file") MultipartFile file,
             Principal principal) throws IOException {
 
+        System.out.println("[ChatUploadController] uploadChatFile method entered. conversationId: " + conversationId + ", file: " + file.getOriginalFilename() + ", principal: " + (principal != null ? principal.getName() : "null"));
+
         // Determine type
         String contentType = file.getContentType() != null ? file.getContentType() : "";
         MessageType messageType = contentType.startsWith("image/") ? MessageType.IMAGE : MessageType.FILE;
