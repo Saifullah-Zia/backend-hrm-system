@@ -36,6 +36,7 @@ public class JwtFilter extends OncePerRequestFilter {
     ) throws ServletException, IOException {
 
         String path = request.getRequestURI();
+        System.out.println("[JwtFilter] Request Path: " + path);
 
         if (path.startsWith("/api/auth")) {
             filterChain.doFilter(request, response);
@@ -44,16 +45,22 @@ public class JwtFilter extends OncePerRequestFilter {
 
         try {
             String authHeader = request.getHeader("Authorization");
+            System.out.println("[JwtFilter] Authorization Header: " + (authHeader != null ? "Present (Length: " + authHeader.length() + ")" : "NULL"));
 
             if (authHeader != null && authHeader.startsWith("Bearer ")) {
                 String token = authHeader.substring(7);
                 String username = jwtUtil.extractUsername(token);
+                System.out.println("[JwtFilter] Username extracted: " + username);
 
                 if (username != null && SecurityContextHolder.getContext().getAuthentication() == null) {
-                    if (jwtUtil.validateToken(token)) {
+                    boolean isValid = jwtUtil.validateToken(token);
+                    System.out.println("[JwtFilter] Is token valid: " + isValid);
+
+                    if (isValid) {
                         UserDetails userDetails = userService.loadUserByUsername(username);
 
                         String role = jwtUtil.extractRole(token);
+                        System.out.println("[JwtFilter] Role extracted: " + role);
 
                         // ✅ Extract userId from JWT and store in request attribute
                         Long userId = jwtUtil.extractUserId(token);
@@ -73,13 +80,20 @@ public class JwtFilter extends OncePerRequestFilter {
                                 );
 
                         SecurityContextHolder.getContext().setAuthentication(authToken);
+                        System.out.println("[JwtFilter] Authentication successfully set in SecurityContextHolder for user: " + username);
+                    } else {
+                        System.out.println("[JwtFilter] Token validation failed, skipping setting authentication.");
                     }
                 }
+            } else {
+                System.out.println("[JwtFilter] Authorization header is missing or does not start with 'Bearer '");
             }
         } catch (ExpiredJwtException e) {
+            System.out.println("[JwtFilter] ExpiredJwtException: " + e.getMessage());
             sendError(response, HttpServletResponse.SC_UNAUTHORIZED, "Token expired. Please log in again.");
             return;
         } catch (JwtException e) {
+            System.out.println("[JwtFilter] JwtException: " + e.getMessage());
             sendError(response, HttpServletResponse.SC_UNAUTHORIZED, "Invalid token.");
             return;
         } catch (Exception e) {
