@@ -35,9 +35,9 @@ public class LeavePolicyService {
     @PostConstruct
     @Transactional
     public void seedDefaultPolicies() {
-        seedIfAbsent("SICK",        10, false, false, 0,  false, null);
-        seedIfAbsent("CASUAL",      12, false, false, 0,  false, null);
-        seedIfAbsent("ANNUAL",      21, true,  true,  7,  false, null);
+        seedIfAbsent("SICK",        8, false, false, 0,  false, null);
+        seedIfAbsent("CASUAL",      10, false, false, 0,  false, null);
+        seedIfAbsent("ANNUAL",      14, true,  true,  7,  false, null);
         // Eid leaves: 3 days each, can apply up to 2 days before the event
         seedIfAbsent("EIDULFITAR",  3,  false, false, 0,  true,  2);
         seedIfAbsent("EIDULAZHA",   3,  false, false, 0,  true,  2);

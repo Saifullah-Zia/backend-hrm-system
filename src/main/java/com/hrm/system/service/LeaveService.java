@@ -91,6 +91,7 @@ public class LeaveService {
                 .reason(dto.getReason())
                 .status(LeaveStatus.PENDING)
                 .durationDays(duration)
+                .attachmentUrl(dto.getAttachmentUrl())
                 .build();
 
         Leave saved = leaveRepository.save(leave);
@@ -276,6 +277,7 @@ public class LeaveService {
                 .reason(leave.getReason())
                 .status(String.valueOf(leave.getStatus()))
                 .durationDays(leave.getDurationDays())
+                .attachmentUrl(leave.getAttachmentUrl())
                 .build();
     }
 }

@@ -190,9 +190,8 @@ public class ResignationService {
         return mapToResponse(saved);
     }
 
-    // ─────────────────────────────────────────────────────
     // WITHDRAW a resignation (by employee)
-    // ─────────────────────────────────────────────────────
+
     @Transactional
     public ResignationDto.Response withdrawResignation(Long id, String reason) {
         Resignation resignation = findResignationById(id);
@@ -325,16 +324,16 @@ public class ResignationService {
         offboardingTaskRepository.saveAll(defaultTasks);
     }
 
-    // ─────────────────────────────────────────────────────
+
     // HELPER — safely get User ID from EmployeeProfile
-    // ─────────────────────────────────────────────────────
+
     private Long getUserId(EmployeeProfile emp) {
         return (emp != null && emp.getUser() != null) ? emp.getUser().getId() : null;
     }
 
-    // ─────────────────────────────────────────────────────
+   
     // HELPER — notify all HR/ADMIN users
-    // ─────────────────────────────────────────────────────
+
     private void notifyAllHr(String message, Long triggeredByUserId, Long referenceId) {
         userRepository.findByRole(Role.ADMIN)
                 .forEach(hrUser -> notificationService.createNotification(

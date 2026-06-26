@@ -42,6 +42,8 @@ public class Leave {
     @Column(nullable = false)
     private Integer durationDays;
 
+    private String attachmentUrl;
+
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "user_id")
     @JsonIgnore

@@ -76,6 +76,7 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST, "/api/attendance/checkout").hasAnyRole("EMPLOYEE", "ADMIN")
                         .requestMatchers(HttpMethod.POST, "/api/attendance/checkin").hasAnyRole("EMPLOYEE", "ADMIN")
                         .requestMatchers(HttpMethod.GET, "/api/chat/files/**").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/leaves/files/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/documents/files/**").authenticated()
                         .anyRequest().authenticated()
                 )

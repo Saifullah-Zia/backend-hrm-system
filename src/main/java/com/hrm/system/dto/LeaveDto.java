@@ -25,6 +25,8 @@ public class LeaveDto {
 
     private Integer durationDays; // computed days for this request
 
+    private String attachmentUrl;
+
     // Optional: returned during apply so the frontend can show updated balance
     private Integer remainingDaysAfterRequest;
 }
