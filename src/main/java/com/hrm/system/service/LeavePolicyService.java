@@ -148,6 +148,51 @@ public class LeavePolicyService {
     }
 
     // ─────────────────────────────────────────────────────────────────────────
+    // Daily Cron — runs at 1:00 AM every day
+    // Creates balances for policies requiring 1 year of service (e.g. ANNUAL)
+    // for employees who have just completed their first year.
+    // ─────────────────────────────────────────────────────────────────────────
+    @Scheduled(cron = "0 0 1 * * *")
+    @Transactional
+    public void checkAnnualLeaveEligibility() {
+        int currentYear = LocalDate.now().getYear();
+        List<User> allUsers = userRepository.findAll();
+        List<LeavePolicy> policies = leavePolicyRepository.findAll();
+
+        // Only process policies that require 1 year of service
+        List<LeavePolicy> eligibilityPolicies = policies.stream()
+                .filter(LeavePolicy::getRequiresOneYear)
+                .collect(Collectors.toList());
+
+        if (eligibilityPolicies.isEmpty()) return;
+
+        for (User user : allUsers) {
+            if (!hasCompletedOneYear(user)) continue;
+
+            for (LeavePolicy policy : eligibilityPolicies) {
+                boolean alreadyExists = leaveBalanceRepository
+                        .findByUserIdAndLeaveTypeAndYear(user.getId(), policy.getLeaveType(), currentYear)
+                        .isPresent();
+
+                if (!alreadyExists) {
+                    leaveBalanceRepository.save(LeaveBalance.builder()
+                            .user(user)
+                            .leaveType(policy.getLeaveType())
+                            .year(currentYear)
+                            .totalDays(policy.getTotalDaysPerYear())
+                            .usedDays(0)
+                            .pendingDays(0)
+                            .carryForwardDays(0)
+                            .build());
+                    System.out.println("[LeavePolicyService] Created " + policy.getLeaveType()
+                            + " balance for user " + user.getName() + " (ID: " + user.getId()
+                            + ") — completed 1 year of service.");
+                }
+            }
+        }
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
     // Helpers
     // ─────────────────────────────────────────────────────────────────────────
     private boolean hasCompletedOneYear(User user) {
