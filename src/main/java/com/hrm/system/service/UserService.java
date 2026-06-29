@@ -7,6 +7,7 @@ import com.hrm.system.repository.UserRepository;
 import com.hrm.system.repository.ResignationRepository;
 import com.hrm.system.repository.DocumentRepository;
 import com.hrm.system.repository.ConversationRepository;
+import com.hrm.system.repository.AuditLogRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UserDetailsService;
@@ -43,6 +44,9 @@ public class UserService implements UserDetailsService {
 
     @Autowired
     private ConversationRepository conversationRepository;
+
+    @Autowired
+    private AuditLogRepository auditLogRepository;
 
     public UserDTO createUser(User user) {
         user.setPassword(passwordEncoder.encode(user.getPassword()));
@@ -94,6 +98,7 @@ public class UserService implements UserDetailsService {
         resignationRepository.nullifyApprovedBy(id);
         documentRepository.nullifyUploadedBy(id);
         conversationRepository.nullifyCreatedBy(id);
+        auditLogRepository.nullifyPerformedBy(id);
         
         userRepository.delete(user);
     }

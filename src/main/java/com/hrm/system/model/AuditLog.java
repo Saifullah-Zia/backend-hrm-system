@@ -49,9 +49,9 @@ public class AuditLog {
     @Column(columnDefinition = "TEXT")
     private String newValue;
 
-    // User who triggered the change
+    // User who triggered the change (nullable so deleting a user doesn't delete audit history)
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "performed_by", nullable = false)
+    @JoinColumn(name = "performed_by", nullable = true)
     private User performedBy;
 
     // IP address of the request (optional but useful for compliance)

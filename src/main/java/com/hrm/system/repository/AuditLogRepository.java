@@ -37,4 +37,8 @@ public interface AuditLogRepository extends JpaRepository<AuditLog, Long> {
             @Param("from")       LocalDateTime from,
             @Param("to")         LocalDateTime to,
             Pageable pageable);
+
+    @org.springframework.data.jpa.repository.Modifying
+    @org.springframework.data.jpa.repository.Query("UPDATE AuditLog a SET a.performedBy = null WHERE a.performedBy.id = :userId")
+    void nullifyPerformedBy(@Param("userId") Long userId);
 }

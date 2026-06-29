@@ -94,11 +94,13 @@ public class User {
     @JsonIgnore
     private List<ConversationMember> conversationMembers;
 
-    @OneToMany(mappedBy = "performedBy", cascade = CascadeType.ALL, orphanRemoval = true)
+    // AuditLogs are preserved when user is deleted (performedBy is nullified instead of cascade)
+    @OneToMany(mappedBy = "performedBy")
     @JsonIgnore
     private List<AuditLog> auditLogs;
 
-    @OneToMany(mappedBy = "assignedTo", cascade = CascadeType.ALL, orphanRemoval = true)
+    // OffboardingTask is cascade-deleted via EmployeeProfile → do NOT duplicate orphanRemoval here
+    @OneToMany(mappedBy = "assignedTo")
     @JsonIgnore
     private List<OffboardingTask> offboardingTasks;
 
