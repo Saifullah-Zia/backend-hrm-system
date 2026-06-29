@@ -4,6 +4,9 @@ import com.hrm.system.dto.UserDTO;
 import com.hrm.system.model.ProbationStatus;
 import com.hrm.system.model.User;
 import com.hrm.system.repository.UserRepository;
+import com.hrm.system.repository.ResignationRepository;
+import com.hrm.system.repository.DocumentRepository;
+import com.hrm.system.repository.ConversationRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UserDetailsService;
@@ -31,6 +34,15 @@ public class UserService implements UserDetailsService {
 
     @Autowired
     private ProbationService probationService;
+
+    @Autowired
+    private ResignationRepository resignationRepository;
+
+    @Autowired
+    private DocumentRepository documentRepository;
+
+    @Autowired
+    private ConversationRepository conversationRepository;
 
     public UserDTO createUser(User user) {
         user.setPassword(passwordEncoder.encode(user.getPassword()));
@@ -77,6 +89,12 @@ public class UserService implements UserDetailsService {
     public void deleteUser(Long id) {
         User user = userRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("User not found with ID " + id));
+        
+        // Nullify foreign keys referencing this user in other tables before deleting
+        resignationRepository.nullifyApprovedBy(id);
+        documentRepository.nullifyUploadedBy(id);
+        conversationRepository.nullifyCreatedBy(id);
+        
         userRepository.delete(user);
     }
 

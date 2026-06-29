@@ -30,6 +30,10 @@ public interface ResignationRepository extends JpaRepository<Resignation, Long> 
 
     void deleteByEmployeeProfile_Id(Long employeeProfileId);
 
+    @org.springframework.data.jpa.repository.Modifying
+    @org.springframework.data.jpa.repository.Query("UPDATE Resignation r SET r.approvedBy = null WHERE r.approvedBy.id = :userId")
+    void nullifyApprovedBy(@Param("userId") Long userId);
+
     // Add this method
     @Query("SELECT r FROM Resignation r WHERE (:status IS NULL OR r.status = :status)")
     Page<Resignation> findAllPaged(

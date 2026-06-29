@@ -54,6 +54,15 @@ public class EmployeeProfile {
     @Enumerated(EnumType.STRING)
     private EmploymentStatus employmentStatus; // ACTIVE, INACTIVE, TERMINATED
 
+    @OneToMany(mappedBy = "employeeProfile", cascade = CascadeType.ALL, orphanRemoval = true)
+    private java.util.List<Resignation> resignations;
+
+    @OneToMany(mappedBy = "employee", cascade = CascadeType.ALL, orphanRemoval = true)
+    private java.util.List<OffboardingTask> offboardingTasks;
+
+    @OneToMany(mappedBy = "employeeProfile", cascade = CascadeType.ALL, orphanRemoval = true)
+    private java.util.List<Document> documents;
+
     @CreatedDate
     @Column(updatable = false)
     private LocalDateTime createdAt;

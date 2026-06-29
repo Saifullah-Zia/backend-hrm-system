@@ -42,4 +42,8 @@ public interface DocumentRepository extends JpaRepository<Document, Long> {
 
     @Query("SELECT d FROM Document d JOIN FETCH d.employeeProfile LEFT JOIN FETCH d.uploadedBy")
     List<Document> findAllWithAssociations();
+
+    @org.springframework.data.jpa.repository.Modifying
+    @org.springframework.data.jpa.repository.Query("UPDATE Document d SET d.uploadedBy = null WHERE d.uploadedBy.id = :userId")
+    void nullifyUploadedBy(@Param("userId") Long userId);
 }

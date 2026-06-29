@@ -32,4 +32,8 @@ public interface ConversationRepository extends JpaRepository<Conversation, UUID
         ORDER BY c.createdAt DESC
     """)
     List<Conversation> findAllByMember(@Param("userId") Long userId);
+
+    @org.springframework.data.jpa.repository.Modifying
+    @org.springframework.data.jpa.repository.Query("UPDATE Conversation c SET c.createdBy = null WHERE c.createdBy.id = :userId")
+    void nullifyCreatedBy(@Param("userId") Long userId);
 }
