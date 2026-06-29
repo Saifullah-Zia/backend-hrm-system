@@ -331,7 +331,7 @@ public class ResignationService {
         return (emp != null && emp.getUser() != null) ? emp.getUser().getId() : null;
     }
 
-   
+
     // HELPER — notify all HR/ADMIN users
 
     private void notifyAllHr(String message, Long triggeredByUserId, Long referenceId) {
