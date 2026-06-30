@@ -147,18 +147,38 @@ public class LeaveBalanceService {
         LeaveBalance balance = leaveBalanceRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Leave balance not found: " + id));
 
+        int oldTotal = balance.getTotalDays();
+        int oldUsed = balance.getUsedDays();
+
         if (req.getTotalDays() != null) {
-            if (req.getTotalDays() < 0) {
+            int requestedTotal = req.getTotalDays();
+            if (requestedTotal < 0) {
                 throw new RuntimeException("Total days cannot be negative.");
             }
-            balance.setTotalDays(req.getTotalDays());
-        }
-        if (req.getUsedDays() != null) {
+
+            int explicitUsed = req.getUsedDays() != null ? req.getUsedDays() : oldUsed;
+            // When admin lowers total without changing used, treat the drop as consumed days
+            // so employees see e.g. "1 used · 10 total" with 9 remaining (not "0 used · 9 total").
+            if (requestedTotal < oldTotal && explicitUsed == oldUsed) {
+                int delta = oldTotal - requestedTotal;
+                balance.setUsedDays(oldUsed + delta);
+                balance.setTotalDays(oldTotal);
+            } else {
+                balance.setTotalDays(requestedTotal);
+                if (req.getUsedDays() != null) {
+                    if (req.getUsedDays() < 0) {
+                        throw new RuntimeException("Used days cannot be negative.");
+                    }
+                    balance.setUsedDays(req.getUsedDays());
+                }
+            }
+        } else if (req.getUsedDays() != null) {
             if (req.getUsedDays() < 0) {
                 throw new RuntimeException("Used days cannot be negative.");
             }
             balance.setUsedDays(req.getUsedDays());
         }
+
         if (req.getPendingDays() != null) {
             if (req.getPendingDays() < 0) {
                 throw new RuntimeException("Pending days cannot be negative.");
