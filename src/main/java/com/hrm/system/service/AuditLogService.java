@@ -45,6 +45,7 @@ public class AuditLogService {
                     .oldValue(request.getOldValue())
                     .newValue(request.getNewValue())
                     .performedBy(performer)
+                    .performedByName(performer.getName())
                     .ipAddress(request.getIpAddress())
                     .build();
 
@@ -103,6 +104,15 @@ public class AuditLogService {
 
     // MAPPER — Entity → Response DTO
     private AuditLogDto.Response mapToResponse(AuditLog a) {
+        User performer = a.getPerformedBy();
+        String performerName = a.getPerformedByName();
+        if ((performerName == null || performerName.isBlank()) && performer != null) {
+            performerName = performer.getName();
+        }
+        if (performerName == null || performerName.isBlank()) {
+            performerName = "Deleted user";
+        }
+
         return AuditLogDto.Response.builder()
                 .id(a.getId())
                 .entityName(a.getEntityName())
@@ -111,8 +121,8 @@ public class AuditLogService {
                 .description(a.getDescription())
                 .oldValue(a.getOldValue())
                 .newValue(a.getNewValue())
-                .performedById(a.getPerformedBy().getId())
-                .performedByName(a.getPerformedBy().getName())
+                .performedById(performer != null ? performer.getId() : null)
+                .performedByName(performerName)
                 .ipAddress(a.getIpAddress())
                 .createdAt(a.getCreatedAt())
                 .build();

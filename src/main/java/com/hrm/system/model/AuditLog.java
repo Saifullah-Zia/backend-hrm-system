@@ -54,6 +54,10 @@ public class AuditLog {
     @JoinColumn(name = "performed_by", nullable = true)
     private User performedBy;
 
+    // Snapshot of performer name — kept after user deletion
+    @Column(name = "performed_by_name")
+    private String performedByName;
+
     // IP address of the request (optional but useful for compliance)
     private String ipAddress;
 
