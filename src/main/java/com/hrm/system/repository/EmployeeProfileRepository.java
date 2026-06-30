@@ -13,11 +13,16 @@ import java.util.Optional;
 public interface EmployeeProfileRepository extends JpaRepository<EmployeeProfile, Long> {
     List<EmployeeProfile> findByPosition(Position position);
     Optional<EmployeeProfile> findByUserId(Long userId);
+
+    @Query("SELECT DISTINCT e FROM EmployeeProfile e JOIN FETCH e.user")
+    List<EmployeeProfile> findAllWithUsers();
+
     @Query("SELECT e FROM EmployeeProfile e JOIN FETCH e.user WHERE e.id = :id")
     Optional<EmployeeProfile> findByIdWithUser(@Param("id") Long id);
 
     @Query("""
-    SELECT e FROM EmployeeProfile e
+    SELECT DISTINCT e FROM EmployeeProfile e
+    JOIN FETCH e.user
     WHERE (:search IS NULL
            OR LOWER(e.firstName) LIKE :search
            OR LOWER(e.lastName)  LIKE :search

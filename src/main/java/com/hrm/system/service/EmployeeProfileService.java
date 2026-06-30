@@ -106,8 +106,9 @@ public class EmployeeProfileService {
     // ─────────────────────────────────────────────────────
     // GET ALL
     // ─────────────────────────────────────────────────────
+    @Transactional(readOnly = true)
     public List<EmployeeProfileDto> getAll() {
-        return employeeProfileRepository.findAll()
+        return employeeProfileRepository.findAllWithUsers()
                 .stream()
                 .map(this::toDto)
                 .collect(Collectors.toList());
@@ -155,6 +156,7 @@ public class EmployeeProfileService {
 
     // CREATE also starts probation automatically
 
+    @Transactional
     public EmployeeProfileDto create(EmployeeProfileDto dto) {
         if (employeeProfileRepository.findByUserId(dto.getUserId()).isPresent())
             throw new ResponseStatusException(
