@@ -160,6 +160,16 @@ public class EmployeeProfileService {
             throw new ResponseStatusException(
                     HttpStatus.CONFLICT, "Profile already exists for user ID: " + dto.getUserId());
 
+        if (dto.getFirstName() == null || dto.getFirstName().isBlank()
+                || dto.getLastName() == null || dto.getLastName().isBlank()) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST, "First name and last name are required.");
+        }
+
+        if (dto.getEmploymentStatus() == null) {
+            dto.setEmploymentStatus(com.hrm.system.model.EmploymentStatus.ACTIVE);
+        }
+
         EmployeeProfile profile = toEntity(dto);
         EmployeeProfile saved = employeeProfileRepository.save(profile);
 

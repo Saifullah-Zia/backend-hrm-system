@@ -57,13 +57,14 @@ public class EmployeeProfileController {
     }
 
     @PostMapping
+    @PreAuthorize("hasAnyRole('ADMIN', 'SUPERADMIN')")
     public ResponseEntity<EmployeeProfileDto> create(
             @Valid @RequestBody EmployeeProfileDto dto) {
         return ResponseEntity.ok(employeeProfileService.create(dto));
     }
 
     @PutMapping("/{id}")
-    @PreAuthorize("hasAnyRole('ADMIN')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'SUPERADMIN')")
     public ResponseEntity<EmployeeProfileDto> update(
             @PathVariable Long id,
             @Valid @RequestBody EmployeeProfileDto dto) {
@@ -71,7 +72,7 @@ public class EmployeeProfileController {
     }
 
     @DeleteMapping("/{id}")
-    @PreAuthorize("hasAnyRole('ADMIN')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'SUPERADMIN')")
     public ResponseEntity<String> delete(@PathVariable Long id) {
         employeeProfileService.delete(id);
         return ResponseEntity.ok("Employee profile deleted successfully");

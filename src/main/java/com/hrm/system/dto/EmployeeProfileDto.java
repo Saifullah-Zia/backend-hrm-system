@@ -1,7 +1,8 @@
 package com.hrm.system.dto;
 
 import com.hrm.system.model.EmploymentStatus;
-import jakarta.persistence.Column;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
 import lombok.*;
 import org.springframework.data.annotation.CreatedBy;
 import org.springframework.data.annotation.CreatedDate;
@@ -15,8 +16,14 @@ import java.time.LocalDateTime;
 @NoArgsConstructor @AllArgsConstructor
 public class EmployeeProfileDto {
     private Long id;
+
+    @NotNull(message = "Employee user id is required")
     private Long userId;
+
+    @NotBlank(message = "First name is required")
     private String firstName;
+
+    @NotBlank(message = "Last name is required")
     private String lastName;
     private String phone;
     private String address;
@@ -31,7 +38,6 @@ public class EmployeeProfileDto {
     private EmploymentStatus employmentStatus;
 
     @CreatedDate
-    @Column(updatable = false)
     private LocalDateTime createdAt;
 
     @LastModifiedDate
