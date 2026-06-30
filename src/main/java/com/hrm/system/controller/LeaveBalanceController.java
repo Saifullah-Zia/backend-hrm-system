@@ -1,6 +1,7 @@
 package com.hrm.system.controller;
 
 import com.hrm.system.dto.LeaveBalanceDto;
+import com.hrm.system.dto.LeaveBalanceUpdateRequest;
 import com.hrm.system.service.LeaveBalanceService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
@@ -51,5 +52,17 @@ public class LeaveBalanceController {
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "10") int size) {
         return ResponseEntity.ok(leaveBalanceService.getAllBalancesCurrentYear(page, size));
+    }
+
+    /**
+     * PUT /api/leave/balance/{id}
+     * Admin / super admin — manually adjust total, used, pending, or carry-forward days.
+     */
+    @PutMapping("/{id}")
+    @PreAuthorize("hasRole('SUPERADMIN') or hasRole('ADMIN')")
+    public ResponseEntity<LeaveBalanceDto> updateBalance(
+            @PathVariable Long id,
+            @RequestBody LeaveBalanceUpdateRequest request) {
+        return ResponseEntity.ok(leaveBalanceService.updateBalance(id, request));
     }
 }

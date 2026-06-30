@@ -1,6 +1,7 @@
 package com.hrm.system.service;
 
 import com.hrm.system.dto.LeaveBalanceDto;
+import com.hrm.system.dto.LeaveBalanceUpdateRequest;
 import com.hrm.system.model.LeaveBalance;
 import com.hrm.system.model.User;
 import com.hrm.system.repository.LeaveBalanceRepository;
@@ -138,6 +139,46 @@ public class LeaveBalanceService {
     public void refundUsedDays(Long userId, String leaveType, int days) {
         int year = LocalDate.now().getYear();
         leaveBalanceRepository.decrementUsedDays(userId, leaveType.toUpperCase(), year, days);
+    }
+
+    // ─── Admin: manually adjust a leave balance row ───────────────────────────
+    @Transactional
+    public LeaveBalanceDto updateBalance(Long id, LeaveBalanceUpdateRequest req) {
+        LeaveBalance balance = leaveBalanceRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("Leave balance not found: " + id));
+
+        if (req.getTotalDays() != null) {
+            if (req.getTotalDays() < 0) {
+                throw new RuntimeException("Total days cannot be negative.");
+            }
+            balance.setTotalDays(req.getTotalDays());
+        }
+        if (req.getUsedDays() != null) {
+            if (req.getUsedDays() < 0) {
+                throw new RuntimeException("Used days cannot be negative.");
+            }
+            balance.setUsedDays(req.getUsedDays());
+        }
+        if (req.getPendingDays() != null) {
+            if (req.getPendingDays() < 0) {
+                throw new RuntimeException("Pending days cannot be negative.");
+            }
+            balance.setPendingDays(req.getPendingDays());
+        }
+        if (req.getCarryForwardDays() != null) {
+            if (req.getCarryForwardDays() < 0) {
+                throw new RuntimeException("Carry-forward days cannot be negative.");
+            }
+            balance.setCarryForwardDays(req.getCarryForwardDays());
+        }
+
+        if (balance.getUsedDays() + balance.getPendingDays() > balance.getTotalDays()) {
+            throw new RuntimeException(
+                    "Used (" + balance.getUsedDays() + ") + pending (" + balance.getPendingDays() +
+                            ") cannot exceed total (" + balance.getTotalDays() + ").");
+        }
+
+        return mapToDto(leaveBalanceRepository.save(balance));
     }
 
     // ─── Mapper ───────────────────────────────────────────────────────────────
