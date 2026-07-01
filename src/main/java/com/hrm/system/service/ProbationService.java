@@ -77,15 +77,57 @@ public class ProbationService {
     // START probation when employee profile is created
     // ─────────────────────────────────────────────────────
     @Transactional
-    public void startProbation(User user, LocalDate joiningDate) { // ✅ Add joiningDate parameter
-        // ✅ Use joiningDate if provided, otherwise fallback to today
-        LocalDate startDate = (joiningDate != null) ? joiningDate : LocalDate.now();
+    public void startProbation(User user, LocalDate joiningDate) {
+        if (joiningDate == null) {
+            // Probation is tied to joining date — wait until employee profile provides it.
+            return;
+        }
+        applyProbationFromJoiningDate(user, joiningDate);
+    }
 
-        user.setProbationStartDate(startDate);
-        user.setProbationEndDate(startDate.plusMonths(3)); // Adds 3 months to joining date
-        user.setProbationStatus(ProbationStatus.ON_PROBATION);
-        user.setProbationNotificationSent(false);
+    /**
+     * Sets probation start/end from joining date. Used on profile create/update and data sync.
+     */
+    @Transactional
+    public void applyProbationFromJoiningDate(User user, LocalDate joiningDate) {
+        if (joiningDate == null || user == null) {
+            return;
+        }
+        if (user.getProbationStatus() == ProbationStatus.CONFIRMED) {
+            return;
+        }
+
+        user.setProbationStartDate(joiningDate);
+        LocalDate endDate = joiningDate.plusMonths(3);
+        user.setProbationEndDate(endDate);
+
+        if (!LocalDate.now().isBefore(endDate)) {
+            user.setProbationStatus(ProbationStatus.COMPLETED);
+        } else {
+            user.setProbationStatus(ProbationStatus.ON_PROBATION);
+            user.setProbationNotificationSent(false);
+        }
+
         userRepository.save(user);
+    }
+
+    /**
+     * Re-sync probation dates from employee profile joining dates (fixes legacy account-created dates).
+     */
+    @Transactional
+    public void syncProbationFromProfiles(List<com.hrm.system.model.EmployeeProfile> profiles) {
+        for (com.hrm.system.model.EmployeeProfile profile : profiles) {
+            if (profile.getUser() == null || profile.getJoiningDate() == null) {
+                continue;
+            }
+            User user = profile.getUser();
+            LocalDate joiningDate = profile.getJoiningDate();
+            boolean needsSync = user.getProbationStartDate() == null
+                    || !user.getProbationStartDate().equals(joiningDate);
+            if (needsSync) {
+                applyProbationFromJoiningDate(user, joiningDate);
+            }
+        }
     }
 
     // ─────────────────────────────────────────────────────
@@ -188,20 +230,7 @@ public class ProbationService {
         if (newJoiningDate == null || user.getProbationStatus() == ProbationStatus.CONFIRMED) {
             return;
         }
-
-        user.setProbationStartDate(newJoiningDate);
-        LocalDate newEndDate = newJoiningDate.plusMonths(3); // Assuming 3 months probation
-        user.setProbationEndDate(newEndDate);
-
-        // If the new end date is in the past, instantly change status to COMPLETED
-        if (!LocalDate.now().isBefore(newEndDate)) {
-            user.setProbationStatus(ProbationStatus.COMPLETED);
-        } else {
-            user.setProbationStatus(ProbationStatus.ON_PROBATION);
-            user.setProbationNotificationSent(false); // Reset notification so it gets sent at midnight when it completes
-        }
-
-        userRepository.save(user);
+        applyProbationFromJoiningDate(user, newJoiningDate);
     }
 
 

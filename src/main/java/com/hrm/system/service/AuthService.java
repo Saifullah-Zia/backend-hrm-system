@@ -22,19 +22,17 @@ public class AuthService {
     private final PasswordEncoder passwordEncoder;
     private final EmailService emailService;
     private final LeaveBalanceService leaveBalanceService;
-    private final ProbationService probationService ;
 
     public AuthService(UserRepository userRepository,
                        JwtUtil jwtUtil,
                        PasswordEncoder passwordEncoder,
                        EmailService emailService,
-                       LeaveBalanceService leaveBalanceService, ProbationService probationService) {
+                       LeaveBalanceService leaveBalanceService) {
         this.userRepository = userRepository;
         this.jwtUtil = jwtUtil;
         this.passwordEncoder = passwordEncoder;
         this.emailService = emailService;
         this.leaveBalanceService = leaveBalanceService;
-        this.probationService = probationService;
     }
 
     // ── LOGIN ──────────────────────────────────────────────────────────────
@@ -113,9 +111,9 @@ public class AuthService {
         user.setVerificationExpiry(null);
         userRepository.save(user);
 
-        // Initialize leave balances now that account is verified
+        // Initialize leave balances now that account is verified.
+        // Probation starts when HR saves the employee profile with a joining date.
         leaveBalanceService.initializeBalancesForUser(user, LocalDate.now().getYear());
-        probationService.startProbation(user, null);
         return "Email verified successfully. You can now log in.";
     }
 

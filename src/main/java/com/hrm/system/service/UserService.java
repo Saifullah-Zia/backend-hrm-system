@@ -34,9 +34,6 @@ public class UserService implements UserDetailsService {
     private LeaveBalanceService leaveBalanceService;
 
     @Autowired
-    private ProbationService probationService;
-
-    @Autowired
     private ResignationRepository resignationRepository;
 
     @Autowired
@@ -52,7 +49,7 @@ public class UserService implements UserDetailsService {
         user.setPassword(passwordEncoder.encode(user.getPassword()));
         User savedUser = userRepository.save(user);
         leaveBalanceService.initializeBalancesForUser(savedUser, LocalDate.now().getYear());
-        probationService.startProbation(savedUser, null);
+        // Probation starts when HR saves the employee profile with a joining date.
         return convertToDTO(savedUser);
     }
 
