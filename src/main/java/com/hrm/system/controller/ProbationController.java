@@ -43,6 +43,13 @@ public class ProbationController {
         return ResponseEntity.ok(probationService.getConfirmed());
     }
 
+    @PostMapping("/sync-from-profiles")
+    @PreAuthorize("hasAnyRole('ADMIN', 'SUPERADMIN')")
+    public ResponseEntity<String> syncFromProfiles() {
+        int count = probationService.syncAllProbationFromProfiles();
+        return ResponseEntity.ok("Probation dates synced from employee joining dates (" + count + " profiles).");
+    }
+
     // ─────────────────────────────────────────────────────
     // POST — HR confirms an employee as permanent staff
     // ─────────────────────────────────────────────────────

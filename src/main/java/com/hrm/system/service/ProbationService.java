@@ -1,9 +1,11 @@
 package com.hrm.system.service;
 
 import com.hrm.system.dto.ProbationDto;
+import com.hrm.system.model.EmployeeProfile;
 import com.hrm.system.model.ProbationStatus;
 import com.hrm.system.model.Role;
 import com.hrm.system.model.User;
+import com.hrm.system.repository.EmployeeProfileRepository;
 import com.hrm.system.repository.UserRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -26,6 +28,9 @@ public class ProbationService {
     @Autowired
     private EmailService emailService;
 
+    @Autowired
+    private EmployeeProfileRepository employeeProfileRepository;
+
     // ─────────────────────────────────────────────────────
     // MAPPER — User → ProbationDto.Response
     // ─────────────────────────────────────────────────────
@@ -47,6 +52,7 @@ public class ProbationService {
     // ─────────────────────────────────────────────────────
     @Transactional
     public List<ProbationDto.Response> getOnProbation() {
+        syncProbationFromProfiles(employeeProfileRepository.findAllWithUsers());
         updateCompletedProbationsInline();
         return userRepository.findByProbationStatus(ProbationStatus.ON_PROBATION)
                 .stream().map(this::mapToResponse)
@@ -58,6 +64,7 @@ public class ProbationService {
     // ─────────────────────────────────────────────────────
     @Transactional
     public List<ProbationDto.Response> getAwaitingConfirmation() {
+        syncProbationFromProfiles(employeeProfileRepository.findAllWithUsers());
         updateCompletedProbationsInline();
         return userRepository.findByProbationStatus(ProbationStatus.COMPLETED)
                 .stream().map(this::mapToResponse)
@@ -115,19 +122,27 @@ public class ProbationService {
      * Re-sync probation dates from employee profile joining dates (fixes legacy account-created dates).
      */
     @Transactional
-    public void syncProbationFromProfiles(List<com.hrm.system.model.EmployeeProfile> profiles) {
-        for (com.hrm.system.model.EmployeeProfile profile : profiles) {
+    public void syncProbationFromProfiles(List<EmployeeProfile> profiles) {
+        for (EmployeeProfile profile : profiles) {
             if (profile.getUser() == null || profile.getJoiningDate() == null) {
                 continue;
             }
             User user = profile.getUser();
-            LocalDate joiningDate = profile.getJoiningDate();
-            boolean needsSync = user.getProbationStartDate() == null
-                    || !user.getProbationStartDate().equals(joiningDate);
-            if (needsSync) {
-                applyProbationFromJoiningDate(user, joiningDate);
+            if (user.getProbationStatus() == ProbationStatus.CONFIRMED) {
+                continue;
             }
+            // Always align probation window with profile joining date (fixes legacy account-created dates).
+            applyProbationFromJoiningDate(user, profile.getJoiningDate());
         }
+    }
+
+    /** Admin/manual trigger — re-sync every employee profile joining date into probation fields. */
+    @Transactional
+    public int syncAllProbationFromProfiles() {
+        List<EmployeeProfile> profiles = employeeProfileRepository.findAllWithUsers();
+        syncProbationFromProfiles(profiles);
+        updateCompletedProbationsInline();
+        return profiles.size();
     }
 
     // ─────────────────────────────────────────────────────
