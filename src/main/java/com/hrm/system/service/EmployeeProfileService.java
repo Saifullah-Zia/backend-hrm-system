@@ -7,6 +7,7 @@ import com.hrm.system.model.Position;
 import com.hrm.system.model.Resignation;
 import com.hrm.system.model.User;
 import com.hrm.system.repository.DepartmentRepository;
+import com.hrm.system.repository.DocumentRepository;
 import com.hrm.system.repository.EmployeeProfileRepository;
 import com.hrm.system.repository.OffboardingTaskRepository;
 import com.hrm.system.repository.PositionRepository;
@@ -34,6 +35,7 @@ public class EmployeeProfileService {
     private final PositionRepository positionRepository;
     private final ResignationRepository resignationRepository;
     private final OffboardingTaskRepository offboardingTaskRepository;
+    private final DocumentRepository documentRepository;
     private final ProbationService probationService;
     private final LeavePolicyService leavePolicyService;
 
@@ -244,22 +246,32 @@ public class EmployeeProfileService {
     // ─────────────────────────────────────────────────────
     @Transactional
     public void delete(Long id) {
-        if (!employeeProfileRepository.existsById(id))
-            throw new ResponseStatusException(
-                    HttpStatus.NOT_FOUND, "Employee profile not found with ID: " + id);
+        EmployeeProfile profile = employeeProfileRepository.findById(id)
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND, "Employee profile not found with ID: " + id));
 
-        // 1. Find all resignations for this employee
+        // 1. Resignations → offboarding tasks
         List<Resignation> resignations = resignationRepository.findByEmployeeProfile_Id(id);
-
-        // 2. Delete offboarding tasks for each resignation
         for (Resignation r : resignations) {
             offboardingTaskRepository.deleteByResignationId(r.getId());
         }
-
-        // 3. Delete all resignations for this employee
         resignationRepository.deleteByEmployeeProfile_Id(id);
 
-        // 4. Safe to delete the profile now
-        employeeProfileRepository.deleteById(id);
+        // 2. Documents (FK blocks delete if left in place)
+        documentRepository.deleteByEmployeeProfile_Id(id);
+
+        User user = profile.getUser();
+
+        // 3. Profile row
+        employeeProfileRepository.delete(profile);
+
+        // 4. Reset probation on login account so profile can be recreated cleanly
+        if (user != null) {
+            user.setProbationStartDate(null);
+            user.setProbationEndDate(null);
+            user.setProbationStatus(null);
+            user.setProbationNotificationSent(false);
+            userRepository.save(user);
+        }
     }
 }

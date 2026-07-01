@@ -36,6 +36,8 @@ public interface DocumentRepository extends JpaRepository<Document, Long> {
 
     long countByEmployeeProfile_IdAndStatusNot(Long employeeId, DocumentStatus status);
 
+    void deleteByEmployeeProfile_Id(Long employeeProfileId);
+
     @Query("SELECT d FROM Document d JOIN FETCH d.employeeProfile LEFT JOIN FETCH d.uploadedBy " +
             "WHERE d.status != 'DELETED' AND LOWER(d.title) LIKE LOWER(CONCAT('%', :keyword, '%'))")
     List<Document> searchByTitle(@Param("keyword") String keyword);
