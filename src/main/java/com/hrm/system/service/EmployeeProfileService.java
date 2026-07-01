@@ -261,17 +261,17 @@ public class EmployeeProfileService {
         documentRepository.deleteByEmployeeProfile_Id(id);
 
         User user = profile.getUser();
-
-        // 3. Profile row
-        employeeProfileRepository.delete(profile);
-
-        // 4. Reset probation on login account so profile can be recreated cleanly
         if (user != null) {
+            // Break User ↔ profile link before delete (avoids Hibernate merge on deleted instance)
+            user.setEmployeeProfile(null);
             user.setProbationStartDate(null);
             user.setProbationEndDate(null);
             user.setProbationStatus(null);
             user.setProbationNotificationSent(false);
-            userRepository.save(user);
+            userRepository.saveAndFlush(user);
         }
+
+        // 3. Profile row
+        employeeProfileRepository.delete(profile);
     }
 }
