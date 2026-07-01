@@ -29,6 +29,9 @@ public class LeavePolicyService {
     @Autowired
     private UserRepository userRepository;
 
+    @Autowired
+    private LeaveEligibilityService leaveEligibilityService;
+
     // ─────────────────────────────────────────────────────────────────────────
     // Seed default policies on first boot (only if table is empty)
     // ─────────────────────────────────────────────────────────────────────────
@@ -76,7 +79,7 @@ public class LeavePolicyService {
             for (LeavePolicy policy : policies) {
 
                 // Skip annual leave for employees with < 1 year of service
-                if (policy.getRequiresOneYear() && !hasCompletedOneYear(user)) {
+                if (policy.getRequiresOneYear() && !leaveEligibilityService.hasCompletedOneYear(user)) {
                     continue;
                 }
 
@@ -155,50 +158,45 @@ public class LeavePolicyService {
     @Scheduled(cron = "0 0 1 * * *")
     @Transactional
     public void checkAnnualLeaveEligibility() {
-        int currentYear = LocalDate.now().getYear();
         List<User> allUsers = userRepository.findAll();
-        List<LeavePolicy> policies = leavePolicyRepository.findAll();
-
-        // Only process policies that require 1 year of service
-        List<LeavePolicy> eligibilityPolicies = policies.stream()
-                .filter(LeavePolicy::getRequiresOneYear)
-                .collect(Collectors.toList());
-
-        if (eligibilityPolicies.isEmpty()) return;
-
         for (User user : allUsers) {
-            if (!hasCompletedOneYear(user)) continue;
-
-            for (LeavePolicy policy : eligibilityPolicies) {
-                boolean alreadyExists = leaveBalanceRepository
-                        .findByUserIdAndLeaveTypeAndYear(user.getId(), policy.getLeaveType(), currentYear)
-                        .isPresent();
-
-                if (!alreadyExists) {
-                    leaveBalanceRepository.save(LeaveBalance.builder()
-                            .user(user)
-                            .leaveType(policy.getLeaveType())
-                            .year(currentYear)
-                            .totalDays(policy.getTotalDaysPerYear())
-                            .usedDays(0)
-                            .pendingDays(0)
-                            .carryForwardDays(0)
-                            .build());
-                    System.out.println("[LeavePolicyService] Created " + policy.getLeaveType()
-                            + " balance for user " + user.getName() + " (ID: " + user.getId()
-                            + ") — completed 1 year of service.");
-                }
-            }
+            ensureEligibilityBalancesForUser(user);
         }
     }
 
     // ─────────────────────────────────────────────────────────────────────────
-    // Helpers
+    // Immediate allocation when joining date makes employee eligible (no cron wait)
     // ─────────────────────────────────────────────────────────────────────────
-    private boolean hasCompletedOneYear(User user) {
-        if (user.getCreatedAt() == null) return false;
-        return user.getCreatedAt().plusYears(1).isBefore(LocalDate.now().atStartOfDay())
-                || user.getCreatedAt().plusYears(1).isEqual(LocalDate.now().atStartOfDay());
+    @Transactional
+    public void ensureEligibilityBalancesForUser(User user) {
+        if (user == null || user.getId() == null) return;
+        if (!leaveEligibilityService.hasCompletedOneYear(user)) return;
+
+        int currentYear = LocalDate.now().getYear();
+        List<LeavePolicy> eligibilityPolicies = leavePolicyRepository.findAll().stream()
+                .filter(LeavePolicy::getRequiresOneYear)
+                .collect(Collectors.toList());
+
+        for (LeavePolicy policy : eligibilityPolicies) {
+            boolean alreadyExists = leaveBalanceRepository
+                    .findByUserIdAndLeaveTypeAndYear(user.getId(), policy.getLeaveType(), currentYear)
+                    .isPresent();
+
+            if (!alreadyExists) {
+                leaveBalanceRepository.save(LeaveBalance.builder()
+                        .user(user)
+                        .leaveType(policy.getLeaveType())
+                        .year(currentYear)
+                        .totalDays(policy.getTotalDaysPerYear())
+                        .usedDays(0)
+                        .pendingDays(0)
+                        .carryForwardDays(0)
+                        .build());
+                System.out.println("[LeavePolicyService] Created " + policy.getLeaveType()
+                        + " balance for user " + user.getName() + " (ID: " + user.getId()
+                        + ") — completed 1 year from joining date.");
+            }
+        }
     }
 
     // ─────────────────────────────────────────────────────────────────────────

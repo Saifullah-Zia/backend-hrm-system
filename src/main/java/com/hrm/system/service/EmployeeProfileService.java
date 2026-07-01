@@ -35,6 +35,7 @@ public class EmployeeProfileService {
     private final ResignationRepository resignationRepository;
     private final OffboardingTaskRepository offboardingTaskRepository;
     private final ProbationService probationService;
+    private final LeavePolicyService leavePolicyService;
 
 
     // MAPPER  Entity DTO
@@ -177,6 +178,7 @@ public class EmployeeProfileService {
 
         // ✅ MODIFIED: Pass the joiningDate to the probation service
         probationService.startProbation(saved.getUser(), saved.getJoiningDate());
+        leavePolicyService.ensureEligibilityBalancesForUser(saved.getUser());
 
         return toDto(saved);
     }
@@ -185,6 +187,7 @@ public class EmployeeProfileService {
     // ─────────────────────────────────────────────────────
     // UPDATE
     // ─────────────────────────────────────────────────────
+    @Transactional
     public EmployeeProfileDto update(Long id, EmployeeProfileDto dto) {
         EmployeeProfile profile = employeeProfileRepository.findById(id)
                 .orElseThrow(() -> new ResponseStatusException(
@@ -218,7 +221,10 @@ public class EmployeeProfileService {
         profile.setEmploymentStatus(dto.getEmploymentStatus());
         probationService.updateProbation(profile.getUser(), dto.getJoiningDate());
 
-        return toDto(employeeProfileRepository.save(profile));
+        EmployeeProfile saved = employeeProfileRepository.save(profile);
+        leavePolicyService.ensureEligibilityBalancesForUser(saved.getUser());
+
+        return toDto(saved);
     }
 
     @Transactional(readOnly = true)

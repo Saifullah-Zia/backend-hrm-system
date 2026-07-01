@@ -3,6 +3,7 @@ package com.hrm.system;
 import com.hrm.system.model.User;
 import com.hrm.system.repository.UserRepository;
 import com.hrm.system.service.LeaveBalanceService;
+import com.hrm.system.service.LeavePolicyService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
@@ -20,12 +21,16 @@ public class LeaveBalanceInitializer implements ApplicationRunner {
     @Autowired
     private LeaveBalanceService leaveBalanceService;
 
+    @Autowired
+    private LeavePolicyService leavePolicyService;
+
     @Override
     public void run(ApplicationArguments args) {
         int year = LocalDate.now().getYear();
         List<User> allUsers = userRepository.findAll();
         for (User user : allUsers) {
             leaveBalanceService.initializeBalancesForUser(user, year);
+            leavePolicyService.ensureEligibilityBalancesForUser(user);
         }
         System.out.println("✅ Leave balances initialized for " + allUsers.size() + " users for year " + year);
     }

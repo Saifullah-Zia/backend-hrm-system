@@ -35,6 +35,9 @@ public class LeaveService {
     @Autowired
     private NotificationService notificationService;
 
+    @Autowired
+    private LeaveEligibilityService leaveEligibilityService;
+
     // ─────────────────────────────────────────────────────────────────────────
     // Apply for leave
     // ─────────────────────────────────────────────────────────────────────────
@@ -66,13 +69,12 @@ public class LeaveService {
             }
         }
 
-        // ── 4. Annual leave: requires 1 year of service ──────────────────────
+        // ── 4. Annual leave: requires 1 year of service from joining date ──────
         if (policy.getRequiresOneYear()) {
-            if (user.getCreatedAt() == null ||
-                    user.getCreatedAt().plusYears(1).isAfter(LocalDate.now().atStartOfDay())) {
+            if (!leaveEligibilityService.hasCompletedOneYear(user)) {
                 throw new RuntimeException(
                         "You are not eligible for Annual Leave yet. " +
-                                "Annual leave is available after completing 1 year of service.");
+                                "Annual leave is available after completing 1 year of service from your joining date.");
             }
         }
 
