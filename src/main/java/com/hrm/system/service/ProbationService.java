@@ -52,7 +52,7 @@ public class ProbationService {
     // ─────────────────────────────────────────────────────
     @Transactional
     public List<ProbationDto.Response> getOnProbation() {
-        syncProbationFromProfiles(employeeProfileRepository.findAllWithUsers());
+        syncProbationFromProfilesIfNeeded(employeeProfileRepository.findAllWithUsers());
         updateCompletedProbationsInline();
         return userRepository.findByProbationStatus(ProbationStatus.ON_PROBATION)
                 .stream().map(this::mapToResponse)
@@ -64,7 +64,7 @@ public class ProbationService {
     // ─────────────────────────────────────────────────────
     @Transactional
     public List<ProbationDto.Response> getAwaitingConfirmation() {
-        syncProbationFromProfiles(employeeProfileRepository.findAllWithUsers());
+        syncProbationFromProfilesIfNeeded(employeeProfileRepository.findAllWithUsers());
         updateCompletedProbationsInline();
         return userRepository.findByProbationStatus(ProbationStatus.COMPLETED)
                 .stream().map(this::mapToResponse)
@@ -131,8 +131,26 @@ public class ProbationService {
             if (user.getProbationStatus() == ProbationStatus.CONFIRMED) {
                 continue;
             }
-            // Always align probation window with profile joining date (fixes legacy account-created dates).
             applyProbationFromJoiningDate(user, profile.getJoiningDate());
+        }
+    }
+
+    /** Lightweight read-path sync — only fix rows where probation start != joining date. */
+    @Transactional
+    public void syncProbationFromProfilesIfNeeded(List<EmployeeProfile> profiles) {
+        for (EmployeeProfile profile : profiles) {
+            if (profile.getUser() == null || profile.getJoiningDate() == null) {
+                continue;
+            }
+            User user = profile.getUser();
+            if (user.getProbationStatus() == ProbationStatus.CONFIRMED) {
+                continue;
+            }
+            LocalDate joiningDate = profile.getJoiningDate();
+            if (user.getProbationStartDate() == null
+                    || !user.getProbationStartDate().equals(joiningDate)) {
+                applyProbationFromJoiningDate(user, joiningDate);
+            }
         }
     }
 
