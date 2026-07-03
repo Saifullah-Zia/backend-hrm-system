@@ -36,6 +36,7 @@ public class EmployeeProfileDto {
     private Long departmentId;
     private Long positionId;
     private EmploymentStatus employmentStatus;
+    private Integer biometricPersonId; // Hikvision device Employee ID
 
     @CreatedDate
     private LocalDateTime createdAt;

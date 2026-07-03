@@ -13,6 +13,7 @@ import java.util.Optional;
 public interface EmployeeProfileRepository extends JpaRepository<EmployeeProfile, Long> {
     List<EmployeeProfile> findByPosition(Position position);
     Optional<EmployeeProfile> findByUserId(Long userId);
+    Optional<EmployeeProfile> findByBiometricPersonId(Integer biometricPersonId);
 
     @Query("SELECT DISTINCT e FROM EmployeeProfile e JOIN FETCH e.user")
     List<EmployeeProfile> findAllWithUsers();

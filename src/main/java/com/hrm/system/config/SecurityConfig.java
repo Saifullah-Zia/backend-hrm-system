@@ -67,6 +67,7 @@ public class SecurityConfig {
                         .requestMatchers("/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html", "/swagger-resources/**", "/webjars/**").permitAll()
                         .requestMatchers("/api/users/**").permitAll()
                         .requestMatchers("/ws-chat/**").permitAll()
+                        .requestMatchers("/api/hikvision/webhook").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/employee-profiles/me").hasAnyRole("EMPLOYEE", "ADMIN", "SUPERADMIN")
                         .requestMatchers(HttpMethod.GET, "/api/employee-profiles/user/**").hasAnyRole("EMPLOYEE", "ADMIN", "SUPERADMIN")
                         .requestMatchers(HttpMethod.GET, "/api/employee-profiles/**").hasAnyRole("ADMIN", "SUPERADMIN", "EMPLOYEE")

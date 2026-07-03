@@ -54,6 +54,9 @@ public class EmployeeProfile {
     @Enumerated(EnumType.STRING)
     private EmploymentStatus employmentStatus; // ACTIVE, INACTIVE, TERMINATED
 
+    @Column(name = "biometric_person_id")
+    private Integer biometricPersonId; // Hikvision device Employee ID
+
     @OneToMany(mappedBy = "employeeProfile", cascade = CascadeType.ALL, orphanRemoval = true)
     private java.util.List<Resignation> resignations;
 

@@ -59,6 +59,7 @@ public class EmployeeProfileService {
         dto.setDepartmentId(profile.getDepartment() != null ? profile.getDepartment().getId() : null);
         dto.setPositionId(profile.getPosition() != null ? profile.getPosition().getId() : null);
         dto.setEmploymentStatus(profile.getEmploymentStatus());
+        dto.setBiometricPersonId(profile.getBiometricPersonId());
         dto.setCreatedAt(profile.getCreatedAt());
         dto.setUpdatedAt(profile.getUpdatedAt());
         dto.setCreatedBy(profile.getCreatedBy());
@@ -102,6 +103,7 @@ public class EmployeeProfileService {
         profile.setEmergencyContactName(dto.getEmergencyContactName());
         profile.setEmergencyContactPhone(dto.getEmergencyContactPhone());
         profile.setEmploymentStatus(dto.getEmploymentStatus());
+        profile.setBiometricPersonId(dto.getBiometricPersonId());
 
         return profile;
     }
