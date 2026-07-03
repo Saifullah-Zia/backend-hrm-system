@@ -37,6 +37,17 @@ public class HikvisionWebhookController {
     public ResponseEntity<?> handleWebhook(@RequestParam Map<String, String> formData,
                                           @RequestParam(required = false) MultipartFile file) {
         try {
+            // Log all received form data for debugging
+            System.out.println("=== HIKVISION WEBHOOK RECEIVED ===");
+            System.out.println("Form data keys: " + formData.keySet());
+            for (Map.Entry<String, String> entry : formData.entrySet()) {
+                System.out.println(entry.getKey() + " = " + entry.getValue());
+            }
+            if (file != null) {
+                System.out.println("File received: " + file.getOriginalFilename() + ", size: " + file.getSize());
+            }
+            System.out.println("===================================");
+
             // Extract employee ID from form data
             String employeeIdStr = formData.get("employeeId");
             if (employeeIdStr == null || employeeIdStr.isBlank()) {
