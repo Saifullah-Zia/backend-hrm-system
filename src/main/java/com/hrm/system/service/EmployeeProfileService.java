@@ -223,6 +223,7 @@ public class EmployeeProfileService {
         profile.setEmergencyContactName(dto.getEmergencyContactName());
         profile.setEmergencyContactPhone(dto.getEmergencyContactPhone());
         profile.setEmploymentStatus(dto.getEmploymentStatus());
+        profile.setBiometricPersonId(dto.getBiometricPersonId());
         probationService.updateProbation(profile.getUser(), dto.getJoiningDate());
 
         EmployeeProfile saved = employeeProfileRepository.save(profile);
