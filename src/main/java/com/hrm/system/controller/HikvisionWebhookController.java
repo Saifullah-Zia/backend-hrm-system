@@ -39,7 +39,7 @@ public class HikvisionWebhookController {
 
     @PostMapping("/webhook")
     public ResponseEntity<?> handleWebhook(@RequestParam Map<String, String> formData,
-                                          @RequestParam(required = false) MultipartFile file) {
+                                           @RequestParam(required = false) MultipartFile file) {
         try {
             // Log all received form data for debugging
             System.out.println("=== HIKVISION WEBHOOK RECEIVED ===");
@@ -55,21 +55,49 @@ public class HikvisionWebhookController {
             // Hikvision sends event data as JSON string in event_log field
             String eventLogJson = formData.get("event_log");
             if (eventLogJson == null || eventLogJson.isBlank()) {
-                return ResponseEntity.badRequest().body("event_log field is required");
+                // Nothing to process - acknowledge so the device doesn't retry.
+                return ResponseEntity.ok("Ignored: no event_log field present");
             }
 
             // Parse the JSON structure
             JsonNode rootNode = objectMapper.readTree(eventLogJson);
             JsonNode accessControllerEvent = rootNode.path("AccessControllerEvent");
 
-            // Extract employee ID from verifyNo field (this is the employee/person ID from the device)
+            // Ignore events that are not successful verifications (e.g. failed/invalid scans,
+            // door events, tamper alarms, etc). Returning 200 here (instead of an error) tells
+            // the device the event was handled, so it stops endlessly retrying events we don't
+            // care about. This is what was causing the same old failed event to be resent
+            // forever - the controller was returning 404/400 for it, so the device kept retrying.
+            String currentVerifyMode = accessControllerEvent.has("currentVerifyMode")
+                    ? accessControllerEvent.get("currentVerifyMode").asText()
+                    : null;
+            if ("invalid".equalsIgnoreCase(currentVerifyMode)) {
+                System.out.println("Ignoring invalid/failed verification event");
+                return ResponseEntity.ok("Ignored: invalid verification event");
+            }
+
+            // Extract employee ID. On a SUCCESSFUL verification, Hikvision access controllers
+            // send the real employee number in "employeeNoString". "verifyNo" is not the
+            // employee ID - it's an internal counter and should only be used as a last resort
+            // fallback, if at all.
             Integer employeeId = null;
-            if (accessControllerEvent.has("verifyNo")) {
+            if (accessControllerEvent.has("employeeNoString")
+                    && !accessControllerEvent.get("employeeNoString").asText().isBlank()) {
+                try {
+                    employeeId = Integer.parseInt(accessControllerEvent.get("employeeNoString").asText().trim());
+                } catch (NumberFormatException ignored) {
+                    // Not numeric - leave employeeId null and fall through below.
+                }
+            }
+            if (employeeId == null && accessControllerEvent.has("verifyNo")) {
                 employeeId = accessControllerEvent.get("verifyNo").asInt();
             }
 
             if (employeeId == null || employeeId <= 0) {
-                return ResponseEntity.badRequest().body("Employee ID (verifyNo) not found in event data");
+                // Acknowledge with 200 so the device does not keep retrying an event we can
+                // never resolve into an employee.
+                System.out.println("No usable employee ID field found in event, ignoring event");
+                return ResponseEntity.ok("Ignored: no employee ID in event data");
             }
 
             // Create final variable for lambda
@@ -77,8 +105,15 @@ public class HikvisionWebhookController {
 
             // Look up employee by biometricPersonId
             EmployeeProfile profile = employeeProfileRepository.findByBiometricPersonId(finalEmployeeId)
-                    .orElseThrow(() -> new EntityNotFoundException(
-                            "No employee found with biometric Person ID: " + finalEmployeeId));
+                    .orElse(null);
+
+            if (profile == null) {
+                // Acknowledge with 200 (not 404) so the device doesn't keep retrying this
+                // event forever just because we haven't mapped this person yet.
+                System.out.println("No employee found with biometric Person ID: " + finalEmployeeId);
+                return ResponseEntity.ok(
+                        "Ignored: no employee found with biometric Person ID " + finalEmployeeId);
+            }
 
             Long userId = profile.getUser().getId();
 
@@ -101,11 +136,12 @@ public class HikvisionWebhookController {
                 return ResponseEntity.ok("Check-in recorded for employee ID: " + employeeId);
             }
 
-        } catch (EntityNotFoundException e) {
-            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(e.getMessage());
         } catch (Exception e) {
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body("Error processing webhook: " + e.getMessage());
+            // Still return 200 for unexpected errors related to event content, to avoid
+            // infinite device retries. Log the error so it's visible in Railway logs.
+            System.out.println("Error processing webhook: " + e.getMessage());
+            e.printStackTrace();
+            return ResponseEntity.ok("Acknowledged (error logged): " + e.getMessage());
         }
     }
 
