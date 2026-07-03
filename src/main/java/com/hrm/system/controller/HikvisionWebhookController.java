@@ -1,6 +1,5 @@
 package com.hrm.system.controller;
 
-import com.hrm.system.dto.HikvisionEventDto;
 import com.hrm.system.model.EmployeeProfile;
 import com.hrm.system.repository.AttendanceRepository;
 import com.hrm.system.repository.EmployeeProfileRepository;
@@ -9,10 +8,12 @@ import jakarta.persistence.EntityNotFoundException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/hikvision")
@@ -33,22 +34,43 @@ public class HikvisionWebhookController {
     }
 
     @PostMapping("/webhook")
-    public ResponseEntity<?> handleWebhook(@RequestBody HikvisionEventDto event) {
+    public ResponseEntity<?> handleWebhook(@RequestParam Map<String, String> formData,
+                                          @RequestParam(required = false) MultipartFile file) {
         try {
-            // Validate required fields
-            if (event.getEmployeeId() == null) {
+            // Extract employee ID from form data
+            String employeeIdStr = formData.get("employeeId");
+            if (employeeIdStr == null || employeeIdStr.isBlank()) {
+                // Try alternative field names that Hikvision might use
+                employeeIdStr = formData.get("employeeID");
+                if (employeeIdStr == null || employeeIdStr.isBlank()) {
+                    employeeIdStr = formData.get("employee_number");
+                }
+                if (employeeIdStr == null || employeeIdStr.isBlank()) {
+                    employeeIdStr = formData.get("personID");
+                }
+            }
+
+            if (employeeIdStr == null || employeeIdStr.isBlank()) {
                 return ResponseEntity.badRequest().body("Employee ID is required");
             }
 
+            Integer employeeId;
+            try {
+                employeeId = Integer.parseInt(employeeIdStr.trim());
+            } catch (NumberFormatException e) {
+                return ResponseEntity.badRequest().body("Invalid Employee ID format: " + employeeIdStr);
+            }
+
             // Look up employee by biometricPersonId
-            EmployeeProfile profile = employeeProfileRepository.findByBiometricPersonId(event.getEmployeeId())
+            EmployeeProfile profile = employeeProfileRepository.findByBiometricPersonId(employeeId)
                     .orElseThrow(() -> new EntityNotFoundException(
-                            "No employee found with biometric Person ID: " + event.getEmployeeId()));
+                            "No employee found with biometric Person ID: " + employeeId));
 
             Long userId = profile.getUser().getId();
 
             // Parse event timestamp to determine date
-            LocalDate eventDate = parseEventDate(event.getTimestamp());
+            String timestamp = formData.get("timestamp");
+            LocalDate eventDate = parseEventDate(timestamp);
 
             // Check if already checked in today
             boolean alreadyCheckedIn = attendanceRepository
@@ -58,11 +80,11 @@ public class HikvisionWebhookController {
             if (alreadyCheckedIn) {
                 // Check out
                 attendanceService.checkOut(userId);
-                return ResponseEntity.ok("Check-out recorded for employee ID: " + event.getEmployeeId());
+                return ResponseEntity.ok("Check-out recorded for employee ID: " + employeeId);
             } else {
                 // Check in
                 attendanceService.checkIn(userId);
-                return ResponseEntity.ok("Check-in recorded for employee ID: " + event.getEmployeeId());
+                return ResponseEntity.ok("Check-in recorded for employee ID: " + employeeId);
             }
 
         } catch (EntityNotFoundException e) {
