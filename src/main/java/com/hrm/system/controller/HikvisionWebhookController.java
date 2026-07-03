@@ -128,12 +128,24 @@ public class HikvisionWebhookController {
 
             if (alreadyCheckedIn) {
                 // Check out
-                attendanceService.checkOut(userId);
-                return ResponseEntity.ok("Check-out recorded for employee ID: " + employeeId);
+                try {
+                    attendanceService.checkOut(userId);
+                    return ResponseEntity.ok("Check-out recorded for employee ID: " + employeeId);
+                } catch (IllegalStateException e) {
+                    // Already checked out earlier today (e.g. 3rd+ scan of the day) - not an error,
+                    // just acknowledge and do nothing.
+                    System.out.println("Ignoring duplicate scan: " + e.getMessage());
+                    return ResponseEntity.ok("Ignored: employee already checked out today");
+                }
             } else {
                 // Check in
-                attendanceService.checkIn(userId);
-                return ResponseEntity.ok("Check-in recorded for employee ID: " + employeeId);
+                try {
+                    attendanceService.checkIn(userId);
+                    return ResponseEntity.ok("Check-in recorded for employee ID: " + employeeId);
+                } catch (IllegalStateException e) {
+                    System.out.println("Ignoring duplicate scan: " + e.getMessage());
+                    return ResponseEntity.ok("Ignored: employee already checked in today");
+                }
             }
 
         } catch (Exception e) {
