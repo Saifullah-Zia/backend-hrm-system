@@ -1,5 +1,7 @@
 package com.hrm.system.controller;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.hrm.system.model.EmployeeProfile;
 import com.hrm.system.repository.AttendanceRepository;
 import com.hrm.system.repository.EmployeeProfileRepository;
@@ -22,6 +24,7 @@ public class HikvisionWebhookController {
     private final EmployeeProfileRepository employeeProfileRepository;
     private final AttendanceRepository attendanceRepository;
     private final AttendanceService attendanceService;
+    private final ObjectMapper objectMapper;
 
     private static final DateTimeFormatter EVENT_TIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
 
@@ -31,6 +34,7 @@ public class HikvisionWebhookController {
         this.employeeProfileRepository = employeeProfileRepository;
         this.attendanceRepository = attendanceRepository;
         this.attendanceService = attendanceService;
+        this.objectMapper = new ObjectMapper();
     }
 
     @PostMapping("/webhook")
@@ -48,28 +52,24 @@ public class HikvisionWebhookController {
             }
             System.out.println("===================================");
 
-            // Extract employee ID from form data
-            String employeeIdStr = formData.get("employeeId");
-            if (employeeIdStr == null || employeeIdStr.isBlank()) {
-                // Try alternative field names that Hikvision might use
-                employeeIdStr = formData.get("employeeID");
-                if (employeeIdStr == null || employeeIdStr.isBlank()) {
-                    employeeIdStr = formData.get("employee_number");
-                }
-                if (employeeIdStr == null || employeeIdStr.isBlank()) {
-                    employeeIdStr = formData.get("personID");
-                }
+            // Hikvision sends event data as JSON string in event_log field
+            String eventLogJson = formData.get("event_log");
+            if (eventLogJson == null || eventLogJson.isBlank()) {
+                return ResponseEntity.badRequest().body("event_log field is required");
             }
 
-            if (employeeIdStr == null || employeeIdStr.isBlank()) {
-                return ResponseEntity.badRequest().body("Employee ID is required");
+            // Parse the JSON structure
+            JsonNode rootNode = objectMapper.readTree(eventLogJson);
+            JsonNode accessControllerEvent = rootNode.path("AccessControllerEvent");
+
+            // Extract employee ID from verifyNo field (this is the employee/person ID from the device)
+            Integer employeeId = null;
+            if (accessControllerEvent.has("verifyNo")) {
+                employeeId = accessControllerEvent.get("verifyNo").asInt();
             }
 
-            Integer employeeId;
-            try {
-                employeeId = Integer.parseInt(employeeIdStr.trim());
-            } catch (NumberFormatException e) {
-                return ResponseEntity.badRequest().body("Invalid Employee ID format: " + employeeIdStr);
+            if (employeeId == null || employeeId <= 0) {
+                return ResponseEntity.badRequest().body("Employee ID (verifyNo) not found in event data");
             }
 
             // Look up employee by biometricPersonId
@@ -80,8 +80,8 @@ public class HikvisionWebhookController {
             Long userId = profile.getUser().getId();
 
             // Parse event timestamp to determine date
-            String timestamp = formData.get("timestamp");
-            LocalDate eventDate = parseEventDate(timestamp);
+            String dateTime = rootNode.has("dateTime") ? rootNode.get("dateTime").asText() : null;
+            LocalDate eventDate = parseEventDate(dateTime);
 
             // Check if already checked in today
             boolean alreadyCheckedIn = attendanceRepository
@@ -111,11 +111,18 @@ public class HikvisionWebhookController {
             return LocalDate.now();
         }
         try {
-            LocalDateTime eventDateTime = LocalDateTime.parse(timestamp, EVENT_TIME_FORMATTER);
+            // Try ISO 8601 format first (Hikvision format: 2024-09-05T17:47:39+08:00)
+            LocalDateTime eventDateTime = LocalDateTime.parse(timestamp, DateTimeFormatter.ISO_DATE_TIME);
             return eventDateTime.toLocalDate();
         } catch (Exception e) {
-            // If parsing fails, use today's date
-            return LocalDate.now();
+            try {
+                // Fallback to custom format
+                LocalDateTime eventDateTime = LocalDateTime.parse(timestamp, EVENT_TIME_FORMATTER);
+                return eventDateTime.toLocalDate();
+            } catch (Exception e2) {
+                // If parsing fails, use today's date
+                return LocalDate.now();
+            }
         }
     }
 }
