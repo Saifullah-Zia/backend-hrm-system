@@ -72,10 +72,13 @@ public class HikvisionWebhookController {
                 return ResponseEntity.badRequest().body("Employee ID (verifyNo) not found in event data");
             }
 
+            // Create final variable for lambda
+            final Integer finalEmployeeId = employeeId;
+
             // Look up employee by biometricPersonId
-            EmployeeProfile profile = employeeProfileRepository.findByBiometricPersonId(employeeId)
+            EmployeeProfile profile = employeeProfileRepository.findByBiometricPersonId(finalEmployeeId)
                     .orElseThrow(() -> new EntityNotFoundException(
-                            "No employee found with biometric Person ID: " + employeeId));
+                            "No employee found with biometric Person ID: " + finalEmployeeId));
 
             Long userId = profile.getUser().getId();
 
