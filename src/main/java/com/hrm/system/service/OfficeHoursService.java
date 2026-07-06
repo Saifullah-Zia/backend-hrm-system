@@ -64,15 +64,17 @@ public class OfficeHoursService {
         boolean graceCrossesMidnight = deadline.isBefore(shiftStart);
 
         if (isOvernightShift) {
-            boolean afterShiftStart = !checkInPKT.isBefore(shiftStart);  // >= 17:00
-            boolean beforeDeadline  = !checkInPKT.isAfter(deadline);     // <= 17:15
+            // For overnight shifts, allow early arrivals (before shift start) to be PRESENT
+            // Only mark LATE if check-in is after the grace deadline
+            boolean beforeDeadline = !checkInPKT.isAfter(deadline);  // <= 17:15
 
             if (graceCrossesMidnight) {
-                // PRESENT if after shift start OR before deadline (next day side)
+                // Grace crosses midnight: check if after shift start OR before deadline (next day)
+                boolean afterShiftStart = !checkInPKT.isBefore(shiftStart);
                 return (afterShiftStart || beforeDeadline) ? "PRESENT" : "LATE";
             } else {
-                // PRESENT only if checked in between shiftStart and deadline
-                return (afterShiftStart && beforeDeadline) ? "PRESENT" : "LATE";
+                // PRESENT if checked in before deadline (includes early arrivals)
+                return beforeDeadline ? "PRESENT" : "LATE";
             }
         } else {
             // Regular day shift
