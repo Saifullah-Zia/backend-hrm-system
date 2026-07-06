@@ -133,6 +133,75 @@ public class EmailService {
         }
     }
 
+    // Send Leave Request Notification to Admins
+    public void sendLeaveRequestNotification(
+            String toEmail,
+            String employeeName,
+            String leaveType,
+            String startDate,
+            String endDate,
+            int duration,
+            String reason
+    ) {
+        String htmlContent = """
+            <!DOCTYPE html>
+            <html>
+            <head><style>
+                body { font-family: Arial, sans-serif; }
+                .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+                .header { background-color: #4F46E5; color: white; padding: 20px; text-align: center; }
+                .content { padding: 20px; background-color: #f9fafb; }
+                .footer { text-align: center; padding: 20px; font-size: 12px; color: #6b7280; }
+                .reason-box { background-color: #f3f4f6; padding: 15px; border-radius: 8px; margin: 10px 0; }
+            </style></head>
+            <body>
+                <div class="container">
+                    <div class="header">
+                        <h2>📋 New Leave Request</h2>
+                    </div>
+                    <div class="content">
+                        <p>A new leave request has been submitted:</p>
+                        <p><strong>Employee:</strong> %s</p>
+                        <p><strong>Leave Type:</strong> %s</p>
+                        <p><strong>Duration:</strong> %s to %s (%d day(s))</p>
+                        <div class="reason-box">
+                            <p><strong>Reason:</strong></p>
+                            <p>%s</p>
+                        </div>
+                        <p>Please login to the HRM system to review and approve/reject this request.</p>
+                        <p>Regards,<br>HRM System</p>
+                    </div>
+                    <div class="footer">
+                        <p>© 2026 JCAT Solutions HRM. All rights reserved.</p>
+                    </div>
+                </div>
+            </body>
+            </html>
+        """.formatted(employeeName, leaveType, startDate, endDate, duration, reason);
+
+        String apiKey = System.getenv("RESEND_API_KEY");
+        if (apiKey != null && !apiKey.trim().isEmpty()) {
+            sendViaResend(toEmail, "New Leave Request - " + employeeName, htmlContent, true);
+            return;
+        }
+
+        // Fallback to SMTP
+        try {
+            MimeMessage message = mailSender.createMimeMessage();
+            MimeMessageHelper helper = new MimeMessageHelper(message, true, "UTF-8");
+            helper.setFrom(fromEmail);
+            helper.setTo(toEmail);
+            helper.setSubject("New Leave Request - " + employeeName);
+            helper.setText(htmlContent, true);
+            mailSender.send(message);
+            System.out.println("✓ Leave request email sent to: " + toEmail);
+        } catch (Exception e) {
+            System.err.println("✗ Failed to send leave request email to: " + toEmail);
+            e.printStackTrace();
+            throw new RuntimeException("Email sending failed: " + e.getMessage(), e);
+        }
+    }
+
     // Helper method to send email via Resend API
     private void sendViaResend(String toEmail, String subject, String content, boolean isHtml) {
         try {

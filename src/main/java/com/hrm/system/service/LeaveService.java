@@ -38,6 +38,9 @@ public class LeaveService {
     @Autowired
     private LeaveEligibilityService leaveEligibilityService;
 
+    @Autowired
+    private EmailService emailService;
+
     // ─────────────────────────────────────────────────────────────────────────
     // Apply for leave
     // ─────────────────────────────────────────────────────────────────────────
@@ -112,6 +115,17 @@ public class LeaveService {
         for (User admin : admins) {
             notificationService.createNotification(
                     admin.getId(), message, "LEAVE_REQUEST", user.getId(), saved.getId());
+            
+            // Send email notification
+            emailService.sendLeaveRequestNotification(
+                    admin.getEmail(),
+                    user.getName(),
+                    leaveType,
+                    dto.getStartDate().toString(),
+                    dto.getEndDate().toString(),
+                    duration,
+                    dto.getReason()
+            );
         }
 
         // ── 10. Build response with updated remaining balance ─────────────────
