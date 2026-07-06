@@ -50,11 +50,10 @@ public class AttendanceService {
                         "User not found with id: " + dto.getUserId()));
         attendance.setUser(user);
 
-        // Convert checkIn UTC → PKT
+        // Convert checkIn (assumed PKT from frontend) → store as PKT
         if (dto.getCheckIn() != null) {
             ZonedDateTime checkInPKT = dto.getCheckIn()
-                    .atZone(java.time.ZoneId.of("UTC"))
-                    .withZoneSameInstant(AppTimeZone.PKT);
+                    .atZone(AppTimeZone.PKT);
             attendance.setCheckIn(checkInPKT.toLocalDateTime());
             attendance.setDate(checkInPKT.toLocalDate());
             attendance.setStatus(officeHoursService.calculateStatus(checkInPKT.toLocalTime()));
@@ -62,11 +61,10 @@ public class AttendanceService {
             attendance.setStatus(dto.getStatus() != null ? dto.getStatus() : "ABSENT");
         }
 
-        // Convert checkOut UTC → PKT
+        // Convert checkOut (assumed PKT from frontend) → store as PKT
         if (dto.getCheckOut() != null) {
             ZonedDateTime checkOutPKT = dto.getCheckOut()
-                    .atZone(java.time.ZoneId.of("UTC"))
-                    .withZoneSameInstant(AppTimeZone.PKT);
+                    .atZone(AppTimeZone.PKT);
             attendance.setCheckOut(checkOutPKT.toLocalDateTime());
         }
 
@@ -141,14 +139,12 @@ public class AttendanceService {
 
         if (dto.getCheckIn() != null) {
             ZonedDateTime checkInPKT = dto.getCheckIn()
-                    .atZone(java.time.ZoneId.of("UTC"))
-                    .withZoneSameInstant(AppTimeZone.PKT);
+                    .atZone(AppTimeZone.PKT);
             attendance.setCheckIn(checkInPKT.toLocalDateTime());
         }
         if (dto.getCheckOut() != null) {
             ZonedDateTime checkOutPKT = dto.getCheckOut()
-                    .atZone(java.time.ZoneId.of("UTC"))
-                    .withZoneSameInstant(AppTimeZone.PKT);
+                    .atZone(AppTimeZone.PKT);
             attendance.setCheckOut(checkOutPKT.toLocalDateTime());
         }
 
