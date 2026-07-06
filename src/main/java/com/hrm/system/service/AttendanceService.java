@@ -103,19 +103,23 @@ public class AttendanceService {
 
     @Transactional
     public AttendanceDto checkOut(Long userId) {
-        ZonedDateTime nowPKT   = ZonedDateTime.now(ZoneId.of("Asia/Karachi"));
+        ZonedDateTime nowPKT   = ZonedDateTime.now(AppTimeZone.PKT);
         LocalDate     todayPKT = nowPKT.toLocalDate();
+        System.out.println("checkOut called for user ID: " + userId + ", current PKT time: " + nowPKT + ", today's date: " + todayPKT);
 
         Attendance attendance = attendanceRepository
                 .findByUserIdAndDate(userId, todayPKT)
                 .orElseThrow(() -> new EntityNotFoundException(
                         "No check-in found for today. Please check in first."));
+        System.out.println("Found attendance record for user ID: " + userId + ", check-in time: " + attendance.getCheckIn() + ", check-out time: " + attendance.getCheckOut());
 
         if (attendance.getCheckOut() != null) {
+            System.out.println("User ID: " + userId + " already checked out today at: " + attendance.getCheckOut());
             throw new IllegalStateException("Already checked out today");
         }
 
         attendance.setCheckOut(nowPKT.toLocalDateTime());
+        System.out.println("Setting check-out time for user ID: " + userId + " to: " + nowPKT.toLocalDateTime());
         return mapToDto(attendanceRepository.save(attendance));
     }
 

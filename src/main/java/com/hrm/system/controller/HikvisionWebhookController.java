@@ -120,11 +120,13 @@ public class HikvisionWebhookController {
             // Parse event timestamp to determine date
             String dateTime = rootNode.has("dateTime") ? rootNode.get("dateTime").asText() : null;
             LocalDate eventDate = parseEventDate(dateTime);
+            System.out.println("Processing attendance for employee ID: " + employeeId + ", user ID: " + userId + ", event date: " + eventDate + ", device timestamp: " + dateTime);
 
             // Check if already checked in today
             boolean alreadyCheckedIn = attendanceRepository
                     .findByUserIdAndDate(userId, eventDate)
                     .isPresent();
+            System.out.println("Already checked in today: " + alreadyCheckedIn);
 
             if (alreadyCheckedIn) {
                 // Check out
