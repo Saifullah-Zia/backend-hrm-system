@@ -163,9 +163,9 @@ public class ProbationService {
         return profiles.size();
     }
 
-    // ─────────────────────────────────────────────────────
+
     // SELF-HEALING / INLINE UPDATE check for completed probations
-    // ─────────────────────────────────────────────────────
+
     @Transactional
     public void updateCompletedProbationsInline() {
         List<User> users = userRepository.findByProbationStatus(ProbationStatus.ON_PROBATION);
@@ -213,9 +213,9 @@ public class ProbationService {
         }
     }
 
-    // ─────────────────────────────────────────────────────
+
     // SCHEDULED — runs every midnight to check completions
-    // ─────────────────────────────────────────────────────
+
     @Scheduled(cron = "0 0 0 * * *")
     @Transactional
     public void checkProbationCompletions() {
@@ -223,9 +223,9 @@ public class ProbationService {
     }
 
 
-    // ─────────────────────────────────────────────────────
+
     // CONFIRM probation — HR manually confirms permanent staff
-    // ─────────────────────────────────────────────────────
+
     @Transactional
     public ProbationDto.Response confirmProbation(Long userId, Long confirmedByAdminId) {
         User user = userRepository.findById(userId)

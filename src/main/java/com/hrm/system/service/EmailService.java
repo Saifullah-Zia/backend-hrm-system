@@ -266,6 +266,138 @@ public class EmailService {
         }
     }
 
+    // Send Leave Approved Notification to Employee
+    public void sendLeaveApprovedNotification(
+            String toEmail,
+            String employeeName,
+            String leaveType,
+            String startDate,
+            String endDate,
+            int duration
+    ) {
+        String htmlContent = """
+        <!DOCTYPE html>
+        <html>
+        <head><style>
+            body { font-family: Arial, sans-serif; }
+            .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+            .header { background-color: #16A34A; color: white; padding: 20px; text-align: center; }
+            .content { padding: 20px; background-color: #f9fafb; }
+            .footer { text-align: center; padding: 20px; font-size: 12px; color: #6b7280; }
+            .details-box { background-color: #f0fdf4; padding: 15px; border-radius: 8px; margin: 10px 0; border-left: 4px solid #16A34A; }
+        </style></head>
+        <body>
+            <div class="container">
+                <div class="header">
+                    <h2>✅ Leave Approved</h2>
+                </div>
+                <div class="content">
+                    <p>Dear <strong>%s</strong>,</p>
+                    <p>Your leave request has been <strong>approved</strong>.</p>
+                    <div class="details-box">
+                        <p><strong>Leave Type:</strong> %s</p>
+                        <p><strong>Duration:</strong> %s to %s (%d day(s))</p>
+                    </div>
+                    <p>Please login to the HRM system for more details.</p>
+                    <p>Regards,<br>HR Department</p>
+                </div>
+                <div class="footer">
+                    <p>© 2026 JCAT Solutions HRM. All rights reserved.</p>
+                </div>
+            </div>
+        </body>
+        </html>
+    """.formatted(employeeName, leaveType, startDate, endDate, duration);
+
+        String apiKey = System.getenv("RESEND_API_KEY");
+        if (apiKey != null && !apiKey.trim().isEmpty()) {
+            sendViaResend(toEmail, "Leave Request Approved - " + leaveType, htmlContent, true);
+            return;
+        }
+
+        // Fallback to SMTP
+        try {
+            MimeMessage message = mailSender.createMimeMessage();
+            MimeMessageHelper helper = new MimeMessageHelper(message, true, "UTF-8");
+            helper.setFrom(fromEmail);
+            helper.setTo(toEmail);
+            helper.setSubject("Leave Request Approved - " + leaveType);
+            helper.setText(htmlContent, true);
+            mailSender.send(message);
+            System.out.println("✓ Leave approved email sent to: " + toEmail);
+        } catch (Exception e) {
+            System.err.println("✗ Failed to send leave approved email to: " + toEmail);
+            e.printStackTrace();
+            throw new RuntimeException("Email sending failed: " + e.getMessage(), e);
+        }
+    }
+
+    // Send Leave Rejected Notification to Employee
+    public void sendLeaveRejectedNotification(
+            String toEmail,
+            String employeeName,
+            String leaveType,
+            String startDate,
+            String endDate,
+            int duration
+    ) {
+        String htmlContent = """
+        <!DOCTYPE html>
+        <html>
+        <head><style>
+            body { font-family: Arial, sans-serif; }
+            .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+            .header { background-color: #DC2626; color: white; padding: 20px; text-align: center; }
+            .content { padding: 20px; background-color: #f9fafb; }
+            .footer { text-align: center; padding: 20px; font-size: 12px; color: #6b7280; }
+            .details-box { background-color: #fef2f2; padding: 15px; border-radius: 8px; margin: 10px 0; border-left: 4px solid #DC2626; }
+        </style></head>
+        <body>
+            <div class="container">
+                <div class="header">
+                    <h2>❌ Leave Rejected</h2>
+                </div>
+                <div class="content">
+                    <p>Dear <strong>%s</strong>,</p>
+                    <p>Your leave request has been <strong>rejected</strong>.</p>
+                    <div class="details-box">
+                        <p><strong>Leave Type:</strong> %s</p>
+                        <p><strong>Duration:</strong> %s to %s (%d day(s))</p>
+                    </div>
+                    <p>Please login to the HRM system for more details or contact HR if you have questions.</p>
+                    <p>Regards,<br>HR Department</p>
+                </div>
+                <div class="footer">
+                    <p>© 2026 JCAT Solutions HRM. All rights reserved.</p>
+                </div>
+            </div>
+        </body>
+        </html>
+    """.formatted(employeeName, leaveType, startDate, endDate, duration);
+
+        String apiKey = System.getenv("RESEND_API_KEY");
+        if (apiKey != null && !apiKey.trim().isEmpty()) {
+            sendViaResend(toEmail, "Leave Request Rejected - " + leaveType, htmlContent, true);
+            return;
+        }
+
+        // Fallback to SMTP
+        try {
+            MimeMessage message = mailSender.createMimeMessage();
+            MimeMessageHelper helper = new MimeMessageHelper(message, true, "UTF-8");
+            helper.setFrom(fromEmail);
+            helper.setTo(toEmail);
+            helper.setSubject("Leave Request Rejected - " + leaveType);
+            helper.setText(htmlContent, true);
+            mailSender.send(message);
+            System.out.println("✓ Leave rejected email sent to: " + toEmail);
+        } catch (Exception e) {
+            System.err.println("✗ Failed to send leave rejected email to: " + toEmail);
+            e.printStackTrace();
+            throw new RuntimeException("Email sending failed: " + e.getMessage(), e);
+        }
+    }
+
     // Helper method to send email via Resend API
     private void sendViaResend(String toEmail, String subject, String content, boolean isHtml) {
         try {

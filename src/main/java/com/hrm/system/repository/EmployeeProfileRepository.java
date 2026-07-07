@@ -15,6 +15,7 @@ public interface EmployeeProfileRepository extends JpaRepository<EmployeeProfile
     Optional<EmployeeProfile> findByUserId(Long userId);
     Optional<EmployeeProfile> findByBiometricPersonId(Integer biometricPersonId);
 
+
     @Query("SELECT DISTINCT e FROM EmployeeProfile e JOIN FETCH e.user")
     List<EmployeeProfile> findAllWithUsers();
 

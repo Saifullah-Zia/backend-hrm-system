@@ -62,10 +62,10 @@ public class LeavePolicyService {
         }
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
+
     // Yearly Cron Job — runs at midnight on January 1st every year
     // Generates fresh balances and processes carry-forwards
-    // ─────────────────────────────────────────────────────────────────────────
+
     @Scheduled(cron = "0 0 0 1 1 *")
     @Transactional
     public void processYearlyLeaveReset() {
@@ -119,9 +119,9 @@ public class LeavePolicyService {
         }
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
+
     // Called when a NEW employee is created — seed their initial balances
-    // ─────────────────────────────────────────────────────────────────────────
+
     @Transactional
     public void initializeBalancesForNewEmployee(User user) {
         int currentYear = LocalDate.now().getYear();
@@ -150,11 +150,11 @@ public class LeavePolicyService {
         }
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
+    /
     // Daily Cron — runs at 1:00 AM every day
     // Creates balances for policies requiring 1 year of service (e.g. ANNUAL)
     // for employees who have just completed their first year.
-    // ─────────────────────────────────────────────────────────────────────────
+
     @Scheduled(cron = "0 0 1 * * *")
     @Transactional
     public void checkAnnualLeaveEligibility() {
@@ -164,9 +164,9 @@ public class LeavePolicyService {
         }
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
+
     // Immediate allocation when joining date makes employee eligible (no cron wait)
-    // ─────────────────────────────────────────────────────────────────────────
+
     @Transactional
     public void ensureEligibilityBalancesForUser(User user) {
         if (user == null || user.getId() == null) return;
@@ -199,9 +199,9 @@ public class LeavePolicyService {
         }
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
+
     // CRUD for policies (admin-managed)
-    // ─────────────────────────────────────────────────────────────────────────
+
     public List<LeavePolicyDto> getAllPolicies() {
         return leavePolicyRepository.findAll().stream()
                 .map(this::mapToDto)

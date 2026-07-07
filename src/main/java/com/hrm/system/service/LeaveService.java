@@ -133,7 +133,7 @@ public class LeaveService {
         for (User admin : admins) {
             notificationService.createNotification(
                     admin.getId(), message, "LEAVE_REQUEST", user.getId(), saved.getId());
-            
+
             // Send email notification
             emailService.sendLeaveRequestNotification(
                     admin.getEmail(),
@@ -180,6 +180,22 @@ public class LeaveService {
                         leave.getType(), leave.getStartDate(), leave.getEndDate()),
                 "LEAVE_APPROVED", leave.getUser().getId(), saved.getId());
 
+        // Send email notification to employee
+        // Wrapped so an email failure doesn't roll back the approval itself
+        try {
+            emailService.sendLeaveApprovedNotification(
+                    leave.getUser().getEmail(),
+                    leave.getUser().getName(),
+                    leave.getType(),
+                    leave.getStartDate().toString(),
+                    leave.getEndDate().toString(),
+                    leave.getDurationDays()
+            );
+        } catch (Exception e) {
+            System.err.println("✗ Failed to send leave approved email for leave id: " + saved.getId());
+            e.printStackTrace();
+        }
+
         return mapToDto(saved);
     }
 
@@ -206,6 +222,22 @@ public class LeaveService {
                 String.format("❌ Your %s leave request (%s to %s) has been REJECTED.",
                         leave.getType(), leave.getStartDate(), leave.getEndDate()),
                 "LEAVE_REJECTED", leave.getUser().getId(), saved.getId());
+
+        // Send email notification to employee
+        // Wrapped so an email failure doesn't roll back the rejection itself
+        try {
+            emailService.sendLeaveRejectedNotification(
+                    leave.getUser().getEmail(),
+                    leave.getUser().getName(),
+                    leave.getType(),
+                    leave.getStartDate().toString(),
+                    leave.getEndDate().toString(),
+                    leave.getDurationDays()
+            );
+        } catch (Exception e) {
+            System.err.println("✗ Failed to send leave rejected email for leave id: " + saved.getId());
+            e.printStackTrace();
+        }
 
         return mapToDto(saved);
     }

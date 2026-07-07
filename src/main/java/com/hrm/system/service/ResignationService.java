@@ -33,9 +33,9 @@ public class ResignationService {
 
     private static final String NOTIF_TYPE = "RESIGNATION";
 
-    // ─────────────────────────────────────────────────────
+
     // SUBMIT a resignation
-    // ─────────────────────────────────────────────────────
+
     @Transactional
     public ResignationDto.Response submitResignation(ResignationDto.Request request) {
 
@@ -125,9 +125,9 @@ public class ResignationService {
         return mapToResponse(findResignationById(id));
     }
 
-    // ─────────────────────────────────────────────────────
+
     // APPROVE / REJECT by HR
-    // ─────────────────────────────────────────────────────
+
     @Transactional
     public ResignationDto.Response processResignation(
             Long id, ResignationDto.ApprovalRequest request, Long approvedByUserId) {
