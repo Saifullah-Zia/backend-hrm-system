@@ -227,7 +227,21 @@ public class LeavePolicyService {
         policy.setIsPublicHoliday(dto.getIsPublicHoliday());
         policy.setApplyBeforeDays(dto.getApplyBeforeDays());
 
-        return mapToDto(leavePolicyRepository.save(policy));
+        LeavePolicy updatedPolicy = leavePolicyRepository.save(policy);
+
+        // Update existing LeaveBalance records for current year to reflect new policy
+        int currentYear = LocalDate.now().getYear();
+        List<LeaveBalance> existingBalances = leaveBalanceRepository
+                .findByLeaveTypeAndYear(policy.getLeaveType(), currentYear);
+
+        for (LeaveBalance balance : existingBalances) {
+            // Preserve carry-forward days, update total based on new policy
+            int carryForwardDays = balance.getCarryForwardDays() != null ? balance.getCarryForwardDays() : 0;
+            balance.setTotalDays(updatedPolicy.getTotalDaysPerYear() + carryForwardDays);
+            leaveBalanceRepository.save(balance);
+        }
+
+        return mapToDto(updatedPolicy);
     }
 
     private LeavePolicyDto mapToDto(LeavePolicy p) {
