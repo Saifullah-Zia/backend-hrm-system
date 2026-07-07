@@ -150,10 +150,11 @@ public class LeavePolicyService {
         }
     }
 
-    /
+    // ─────────────────────────────────────────────────────────────────────────
     // Daily Cron — runs at 1:00 AM every day
     // Creates balances for policies requiring 1 year of service (e.g. ANNUAL)
     // for employees who have just completed their first year.
+    // ─────────────────────────────────────────────────────────────────────────
 
     @Scheduled(cron = "0 0 1 * * *")
     @Transactional
