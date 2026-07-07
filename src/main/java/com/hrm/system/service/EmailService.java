@@ -202,6 +202,70 @@ public class EmailService {
         }
     }
 
+    // Send Announcement Notification to Employees
+    public void sendAnnouncementNotification(
+            String toEmail,
+            String employeeName,
+            String announcementTitle,
+            String announcementContent
+    ) {
+        String htmlContent = """
+            <!DOCTYPE html>
+            <html>
+            <head><style>
+                body { font-family: Arial, sans-serif; }
+                .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+                .header { background-color: #F59E0B; color: white; padding: 20px; text-align: center; }
+                .content { padding: 20px; background-color: #f9fafb; }
+                .footer { text-align: center; padding: 20px; font-size: 12px; color: #6b7280; }
+                .announcement-box { background-color: #fffbeb; padding: 20px; border-radius: 8px; margin: 15px 0; border-left: 4px solid #F59E0B; }
+            </style></head>
+            <body>
+                <div class="container">
+                    <div class="header">
+                        <h2>📢 New Announcement</h2>
+                    </div>
+                    <div class="content">
+                        <p>Dear <strong>%s</strong>,</p>
+                        <p>A new announcement has been published:</p>
+                        <div class="announcement-box">
+                            <h3>%s</h3>
+                            <p>%s</p>
+                        </div>
+                        <p>Please login to the HRM system to view all announcements.</p>
+                        <p>Regards,<br>HR Department</p>
+                    </div>
+                    <div class="footer">
+                        <p>© 2026 JCAT Solutions HRM. All rights reserved.</p>
+                    </div>
+                </div>
+            </body>
+            </html>
+        """.formatted(employeeName, announcementTitle, announcementContent);
+
+        String apiKey = System.getenv("RESEND_API_KEY");
+        if (apiKey != null && !apiKey.trim().isEmpty()) {
+            sendViaResend(toEmail, "New Announcement: " + announcementTitle, htmlContent, true);
+            return;
+        }
+
+        // Fallback to SMTP
+        try {
+            MimeMessage message = mailSender.createMimeMessage();
+            MimeMessageHelper helper = new MimeMessageHelper(message, true, "UTF-8");
+            helper.setFrom(fromEmail);
+            helper.setTo(toEmail);
+            helper.setSubject("New Announcement: " + announcementTitle);
+            helper.setText(htmlContent, true);
+            mailSender.send(message);
+            System.out.println("✓ Announcement email sent to: " + toEmail);
+        } catch (Exception e) {
+            System.err.println("✗ Failed to send announcement email to: " + toEmail);
+            e.printStackTrace();
+            throw new RuntimeException("Email sending failed: " + e.getMessage(), e);
+        }
+    }
+
     // Helper method to send email via Resend API
     private void sendViaResend(String toEmail, String subject, String content, boolean isHtml) {
         try {

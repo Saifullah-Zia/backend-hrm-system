@@ -4,9 +4,12 @@ import com.hrm.system.dto.AnnouncementDto;
 import com.hrm.system.dto.AuditLogDto;
 import com.hrm.system.enumm.AuditAction;
 import com.hrm.system.model.Announcement;
+import com.hrm.system.model.User;
 import com.hrm.system.repository.AnnouncementRepository;
+import com.hrm.system.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
@@ -25,6 +28,12 @@ public class AnnouncementService {
     private final AnnouncementRepository announcementRepository;
     private final AuditLogService auditLogService;
 
+    @Autowired
+    private UserRepository userRepository;
+
+    @Autowired
+    private EmailService emailService;
+
     // ── Convert Entity → DTO ──────────────────────────────────────────────────
     private AnnouncementDto toDto(Announcement a) {
         AnnouncementDto dto = new AnnouncementDto();
@@ -39,7 +48,7 @@ public class AnnouncementService {
         return dto;
     }
 
-    // ── Queries ───────────────────────────────────────────────────────────────
+    // Queries
     public List<AnnouncementDto> getAllAnnouncement() {
         return announcementRepository.findAll()
                 .stream()
@@ -58,7 +67,7 @@ public class AnnouncementService {
         return announcementRepository.findAll(pageable).map(this::toDto);
     }
 
-    // ── Create ────────────────────────────────────────────────────────────────
+    // Create
     public AnnouncementDto create(AnnouncementDto dto) {
         Announcement a = new Announcement();
         a.setTitle(dto.getTitle());
@@ -66,6 +75,21 @@ public class AnnouncementService {
         a.setActive(true);
 
         AnnouncementDto saved = toDto(announcementRepository.save(a));
+
+        // Send email notifications to all employees
+        List<User> employees = userRepository.findAll();
+        for (User employee : employees) {
+            try {
+                emailService.sendAnnouncementNotification(
+                        employee.getEmail(),
+                        employee.getName(),
+                        saved.getTitle(),
+                        saved.getContent()
+                );
+            } catch (Exception e) {
+                log.warn("Failed to send announcement email to {}: {}", employee.getEmail(), e.getMessage());
+            }
+        }
 
         // ✅ Manual audit log — guaranteed to fire regardless of AOP
         logAudit(AuditAction.CREATE, saved.getId(), "Created Announcement: " + saved.getTitle());
