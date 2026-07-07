@@ -48,4 +48,20 @@ public class LeaveEligibilityService {
         }
         return !start.plusYears(1).isAfter(LocalDate.now());
     }
+
+    /** Check if user is currently on probation. */
+    public boolean isOnProbation(User user) {
+        if (user == null) {
+            return false;
+        }
+        LocalDate now = LocalDate.now();
+        LocalDate probationStart = user.getProbationStartDate();
+        LocalDate probationEnd = user.getProbationEndDate();
+
+        if (probationStart == null || probationEnd == null) {
+            return false;
+        }
+
+        return !now.isBefore(probationStart) && !now.isAfter(probationEnd);
+    }
 }

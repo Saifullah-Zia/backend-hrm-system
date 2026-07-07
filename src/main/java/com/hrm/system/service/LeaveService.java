@@ -52,8 +52,12 @@ public class LeaveService {
         String leaveType = dto.getLeaveType().toUpperCase();
 
         // ── 1. Load policy ───────────────────────────────────────────────────
-        LeavePolicy policy = leavePolicyRepository.findByLeaveType(leaveType)
-                .orElseThrow(() -> new RuntimeException("Unknown leave type: " + leaveType));
+        // UNPAID leave doesn't require a policy
+        LeavePolicy policy = null;
+        if (!leaveType.equals("UNPAID")) {
+            policy = leavePolicyRepository.findByLeaveType(leaveType)
+                    .orElseThrow(() -> new RuntimeException("Unknown leave type: " + leaveType));
+        }
 
         // ── 2. Date validation ───────────────────────────────────────────────
         if (dto.getEndDate().isBefore(dto.getStartDate())) {
@@ -61,7 +65,7 @@ public class LeaveService {
         }
 
         // ── 3. Eid leave: can only apply within [eventDate - applyBeforeDays, eventDate+duration] ─
-        if (policy.getIsPublicHoliday() && policy.getApplyBeforeDays() != null) {
+        if (policy != null && policy.getIsPublicHoliday() && policy.getApplyBeforeDays() != null) {
             LocalDate today = LocalDate.now();
             LocalDate earliestApplyDate = dto.getStartDate().minusDays(policy.getApplyBeforeDays());
             if (today.isBefore(earliestApplyDate)) {
@@ -73,7 +77,7 @@ public class LeaveService {
         }
 
         // ── 4. Annual leave: requires 1 year of service from joining date ──────
-        if (policy.getRequiresOneYear()) {
+        if (policy != null && policy.getRequiresOneYear()) {
             if (!leaveEligibilityService.hasCompletedOneYear(user)) {
                 throw new RuntimeException(
                         "You are not eligible for Annual Leave yet. " +
@@ -81,13 +85,24 @@ public class LeaveService {
             }
         }
 
-        // ── 5. Calculate duration ─────────────────────────────────────────────
+        // ── 5. Probation check: only UNPAID leave allowed ───────────────────────
+        if (leaveEligibilityService.isOnProbation(user)) {
+            if (!leaveType.equals("UNPAID")) {
+                throw new RuntimeException(
+                        "You are on probation. You can only apply for Unpaid Leave.");
+            }
+        }
+
+        // ── 6. Calculate duration ─────────────────────────────────────────────
         int duration = (int) ChronoUnit.DAYS.between(dto.getStartDate(), dto.getEndDate()) + 1;
 
-        // ── 6. Balance check — throws descriptive error if insufficient ───────
-        leaveBalanceService.validateSufficientBalance(user.getId(), leaveType, duration);
+        // ── 7. Balance check — throws descriptive error if insufficient ───────
+        // Skip balance check for UNPAID leave
+        if (!leaveType.equals("UNPAID")) {
+            leaveBalanceService.validateSufficientBalance(user.getId(), leaveType, duration);
+        }
 
-        // ── 7. Persist leave ──────────────────────────────────────────────────
+        // ── 8. Persist leave ──────────────────────────────────────────────────
         Leave leave = Leave.builder()
                 .user(user)
                 .type(leaveType)
@@ -101,10 +116,13 @@ public class LeaveService {
 
         Leave saved = leaveRepository.save(leave);
 
-        // ── 8. Reserve balance as pending ─────────────────────────────────────
-        leaveBalanceService.reservePendingDays(user.getId(), leaveType, duration);
+        // ── 9. Reserve balance as pending ─────────────────────────────────────
+        // Skip balance reservation for UNPAID leave
+        if (!leaveType.equals("UNPAID")) {
+            leaveBalanceService.reservePendingDays(user.getId(), leaveType, duration);
+        }
 
-        // ── 9. Notify all admins & superadmins ───────────────────────────────
+        // ── 10. Notify all admins & superadmins ───────────────────────────────
         List<User> admins = new ArrayList<>(userRepository.findByRole(Role.ADMIN));
         admins.addAll(userRepository.findByRole(Role.SUPERADMIN));
 
