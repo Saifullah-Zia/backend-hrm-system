@@ -62,12 +62,14 @@ public class NoticeService {
     // ── Send Notice ───────────────────────────────────────────────────────────
     @Transactional
     public com.hrm.system.dto.NoticeDto sendNotice(com.hrm.system.dto.NoticeDto dto) {
-        // Convert userId to Long if it's a String
+        // Convert userId to Long if it's a String, Integer, or Long
         Long userIdLong;
         if (dto.getUserId() instanceof String) {
             userIdLong = Long.parseLong((String) dto.getUserId());
         } else if (dto.getUserId() instanceof Long) {
             userIdLong = (Long) dto.getUserId();
+        } else if (dto.getUserId() instanceof Integer) {
+            userIdLong = ((Integer) dto.getUserId()).longValue();
         } else {
             throw new RuntimeException("Invalid userId type: " + dto.getUserId());
         }
