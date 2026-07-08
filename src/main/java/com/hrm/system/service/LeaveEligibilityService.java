@@ -24,9 +24,9 @@ public class LeaveEligibilityService {
             return null;
         }
 
-        Optional<EmployeeProfile> profile = employeeProfileRepository.findByUserId(user.getId());
-        if (profile.isPresent() && profile.get().getJoiningDate() != null) {
-            return profile.get().getJoiningDate();
+        EmployeeProfile profile = user.getEmployeeProfile();
+        if (profile != null && profile.getJoiningDate() != null) {
+            return profile.getJoiningDate();
         }
 
         if (user.getProbationStartDate() != null) {

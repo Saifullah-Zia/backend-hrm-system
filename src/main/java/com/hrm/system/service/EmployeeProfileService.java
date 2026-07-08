@@ -180,6 +180,9 @@ public class EmployeeProfileService {
         }
 
         EmployeeProfile profile = toEntity(dto);
+        if (dto.getBasicSalary() != null && profile.getUser() != null) {
+            profile.getUser().setBasicSalary(dto.getBasicSalary());
+        }
         EmployeeProfile saved = employeeProfileRepository.save(profile);
 
         // ✅ MODIFIED: Pass the joiningDate to the probation service
@@ -226,7 +229,12 @@ public class EmployeeProfileService {
         profile.setEmergencyContactPhone(dto.getEmergencyContactPhone());
         profile.setEmploymentStatus(dto.getEmploymentStatus());
         profile.setBiometricPersonId(dto.getBiometricPersonId());
-        if (dto.getBasicSalary() != null) profile.setBasicSalary(dto.getBasicSalary());
+        if (dto.getBasicSalary() != null) {
+            profile.setBasicSalary(dto.getBasicSalary());
+            if (profile.getUser() != null) {
+                profile.getUser().setBasicSalary(dto.getBasicSalary());
+            }
+        }
         probationService.updateProbation(profile.getUser(), dto.getJoiningDate());
 
         EmployeeProfile saved = employeeProfileRepository.save(profile);
