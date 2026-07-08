@@ -2,9 +2,14 @@ package com.hrm.system.service;
 
 import com.hrm.system.config.AppTimeZone;
 import com.hrm.system.dto.AttendanceDto;
+import com.hrm.system.dto.AttendanceSummaryDto;
 import com.hrm.system.model.Attendance;
+import com.hrm.system.model.AttendanceSummary;
+import com.hrm.system.model.PayrollPeriod;
 import com.hrm.system.model.User;
 import com.hrm.system.repository.AttendanceRepository;
+import com.hrm.system.repository.AttendanceSummaryRepository;
+import com.hrm.system.repository.PayrollPeriodRepository;
 import com.hrm.system.repository.UserRepository;
 import jakarta.persistence.EntityNotFoundException;
 import org.springframework.data.domain.Page;
@@ -26,13 +31,19 @@ public class AttendanceService {
     private final AttendanceRepository attendanceRepository;
     private final UserRepository       userRepository;
     private final OfficeHoursService   officeHoursService;
+    private final AttendanceSummaryRepository attendanceSummaryRepository;
+    private final PayrollPeriodRepository payrollPeriodRepository;
 
     public AttendanceService(AttendanceRepository attendanceRepository,
                              UserRepository userRepository,
-                             OfficeHoursService officeHoursService) {
+                             OfficeHoursService officeHoursService,
+                             AttendanceSummaryRepository attendanceSummaryRepository,
+                             PayrollPeriodRepository payrollPeriodRepository) {
         this.attendanceRepository = attendanceRepository;
         this.userRepository       = userRepository;
         this.officeHoursService   = officeHoursService;
+        this.attendanceSummaryRepository = attendanceSummaryRepository;
+        this.payrollPeriodRepository = payrollPeriodRepository;
     }
 
     // ── Admin: manual record creation ────────────────────────────────────────
@@ -256,5 +267,103 @@ public class AttendanceService {
         attendance.setDate(date);
         attendance.setStatus("ABSENT");
         attendanceRepository.save(attendance);
+    }
+
+    // ── Payroll Integration: Attendance Summary Generation ─────────────────────
+
+    @Transactional
+    public AttendanceSummaryDto generateAttendanceSummary(Long employeeId, Long payrollPeriodId) {
+        User employee = userRepository.findById(employeeId)
+                .orElseThrow(() -> new EntityNotFoundException("Employee not found: " + employeeId));
+
+        PayrollPeriod payrollPeriod = payrollPeriodRepository.findById(payrollPeriodId)
+                .orElseThrow(() -> new EntityNotFoundException("Payroll period not found: " + payrollPeriodId));
+
+        // Parse month and year to get date range
+        String month = payrollPeriod.getMonth();
+        Integer year = payrollPeriod.getYear();
+
+        // Get first and last day of the month
+        YearMonth yearMonth = YearMonth.of(year, Month.valueOf(month.toUpperCase()));
+        LocalDate startDate = yearMonth.atDay(1);
+        LocalDate endDate = yearMonth.atEndOfMonth();
+
+        // Get attendance records for the period
+        List<Attendance> attendances = attendanceRepository.findByUserIdAndDateBetween(employeeId, startDate, endDate);
+
+        // Count by status
+        int presentDays = (int) attendances.stream().filter(a -> "PRESENT".equals(a.getStatus())).count();
+        int lateDays = (int) attendances.stream().filter(a -> "LATE".equals(a.getStatus())).count();
+        int paidLeaveDays = (int) attendances.stream().filter(a -> "ON_LEAVE".equals(a.getStatus())).count();
+        int unpaidLeaveDays = (int) attendances.stream().filter(a -> "UNPAID_LEAVE".equals(a.getStatus())).count();
+        int absentDays = (int) attendances.stream().filter(a -> "ABSENT".equals(a.getStatus())).count();
+
+        // Calculate working days (excluding weekends - Saturday, Sunday)
+        int workingDays = 0;
+        LocalDate current = startDate;
+        while (!current.isAfter(endDate)) {
+            DayOfWeek dayOfWeek = current.getDayOfWeek();
+            if (dayOfWeek != DayOfWeek.SATURDAY && dayOfWeek != DayOfWeek.SUNDAY) {
+                workingDays++;
+            }
+            current = current.plusDays(1);
+        }
+
+        // Check if summary already exists
+        Optional<AttendanceSummary> existing = attendanceSummaryRepository
+                .findByEmployeeIdAndPayrollPeriodId(employeeId, payrollPeriodId);
+
+        AttendanceSummary summary;
+        if (existing.isPresent()) {
+            summary = existing.get();
+        } else {
+            summary = new AttendanceSummary();
+            summary.setEmployee(employee);
+            summary.setPayrollPeriod(payrollPeriod);
+        }
+
+        summary.setPresentDays(presentDays);
+        summary.setLateDays(lateDays);
+        summary.setPaidLeaveDays(paidLeaveDays);
+        summary.setUnpaidLeaveDays(unpaidLeaveDays);
+        summary.setAbsentDays(absentDays);
+        summary.setWorkingDays(workingDays);
+
+        AttendanceSummary saved = attendanceSummaryRepository.save(summary);
+        return mapToAttendanceSummaryDto(saved);
+    }
+
+    @Transactional
+    public void generateBulkAttendanceSummaries(Long payrollPeriodId) {
+        PayrollPeriod payrollPeriod = payrollPeriodRepository.findById(payrollPeriodId)
+                .orElseThrow(() -> new EntityNotFoundException("Payroll period not found: " + payrollPeriodId));
+
+        // Get all employees
+        List<User> employees = userRepository.findAll();
+
+        for (User employee : employees) {
+            try {
+                generateAttendanceSummary(employee.getId(), payrollPeriodId);
+            } catch (Exception e) {
+                System.err.println("Failed to generate attendance summary for employee: " + employee.getId());
+                e.printStackTrace();
+            }
+        }
+    }
+
+    private AttendanceSummaryDto mapToAttendanceSummaryDto(AttendanceSummary summary) {
+        AttendanceSummaryDto dto = new AttendanceSummaryDto();
+        dto.setId(summary.getId());
+        dto.setEmployeeId(summary.getEmployee().getId());
+        dto.setEmployeeName(summary.getEmployee().getName());
+        dto.setPayrollPeriodId(summary.getPayrollPeriod().getId());
+        dto.setPresentDays(summary.getPresentDays());
+        dto.setLateDays(summary.getLateDays());
+        dto.setPaidLeaveDays(summary.getPaidLeaveDays());
+        dto.setUnpaidLeaveDays(summary.getUnpaidLeaveDays());
+        dto.setAbsentDays(summary.getAbsentDays());
+        dto.setWorkingDays(summary.getWorkingDays());
+        dto.setCreatedAt(summary.getCreatedAt());
+        return dto;
     }
 }
