@@ -74,6 +74,14 @@ public class User {
     @JsonIgnore
     private List<Payroll> payrolls;
 
+    @OneToMany(mappedBy = "lockedBy", cascade = CascadeType.ALL)
+    @JsonIgnore
+    private List<PayrollPeriod> lockedPayrollPeriods;
+
+    @OneToMany(mappedBy = "employee", cascade = CascadeType.ALL, orphanRemoval = true)
+    @JsonIgnore
+    private List<AttendanceSummary> attendanceSummaries;
+
     @OneToMany(mappedBy = "user", cascade = CascadeType.ALL, orphanRemoval = true)
     @JsonIgnore
     private List<LeaveBalance> leaveBalances;
