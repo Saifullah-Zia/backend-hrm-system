@@ -76,16 +76,18 @@ public class NoticeService {
         Notice saved = noticeRepository.save(notice);
         com.hrm.system.dto.NoticeDto savedDto = toDto(saved);
 
-        // Send email notification to employee
+        // Send email notification to employee using simple message
         try {
-            emailService.sendNoticeNotification(
-                    employee.getEmail(),
+            String emailSubject = savedDto.getNoticeType() + " Notice: " + savedDto.getTitle();
+            String emailBody = String.format(
+                    "Dear %s,\n\nYou have received a %s notice:\n\nTitle: %s\nDescription: %s\nEffective Date: %s\n\nPlease login to the HRM system for more details.\n\nRegards,\nHR Department",
                     employee.getName(),
                     savedDto.getNoticeType(),
                     savedDto.getTitle(),
                     savedDto.getDescription(),
-                    savedDto.getEffectiveDate()
+                    savedDto.getEffectiveDate() != null ? savedDto.getEffectiveDate().toString() : "N/A"
             );
+            emailService.sendSimpleMessage(employee.getEmail(), emailSubject, emailBody);
         } catch (Exception e) {
             log.warn("Failed to send notice email to {}: {}", employee.getEmail(), e.getMessage());
         }
