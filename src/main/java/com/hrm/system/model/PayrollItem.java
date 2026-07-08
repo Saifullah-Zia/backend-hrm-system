@@ -35,10 +35,3 @@ public class PayrollItem {
     @Column(name = "description")
     private String description;
 }
-
-public enum PayrollItemType {
-    ALLOWANCE,
-    BONUS,
-    DEDUCTION,
-    OVERTIME
-}

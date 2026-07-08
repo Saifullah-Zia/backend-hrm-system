@@ -101,11 +101,3 @@ public class Payroll {
     @Column(name = "created_at", updatable = false)
     private LocalDateTime createdAt;
 }
-
-public enum PayrollStatus {
-    DRAFT,
-    REVIEWED,
-    APPROVED,
-    PAID,
-    ARCHIVED
-}
