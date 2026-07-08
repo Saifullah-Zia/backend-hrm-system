@@ -57,6 +57,9 @@ public class EmployeeProfile {
     @Column(name = "biometric_person_id")
     private Integer biometricPersonId; // Hikvision device Employee ID
 
+    @Column(name = "basic_salary")
+    private Double basicSalary; // Base monthly salary used for payroll generation
+
     @OneToMany(mappedBy = "employeeProfile", cascade = CascadeType.ALL, orphanRemoval = true)
     private java.util.List<Resignation> resignations;
 

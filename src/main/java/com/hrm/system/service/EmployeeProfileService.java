@@ -60,6 +60,7 @@ public class EmployeeProfileService {
         dto.setPositionId(profile.getPosition() != null ? profile.getPosition().getId() : null);
         dto.setEmploymentStatus(profile.getEmploymentStatus());
         dto.setBiometricPersonId(profile.getBiometricPersonId());
+        dto.setBasicSalary(profile.getBasicSalary());
         dto.setCreatedAt(profile.getCreatedAt());
         dto.setUpdatedAt(profile.getUpdatedAt());
         dto.setCreatedBy(profile.getCreatedBy());
@@ -104,6 +105,7 @@ public class EmployeeProfileService {
         profile.setEmergencyContactPhone(dto.getEmergencyContactPhone());
         profile.setEmploymentStatus(dto.getEmploymentStatus());
         profile.setBiometricPersonId(dto.getBiometricPersonId());
+        profile.setBasicSalary(dto.getBasicSalary());
 
         return profile;
     }
@@ -224,6 +226,7 @@ public class EmployeeProfileService {
         profile.setEmergencyContactPhone(dto.getEmergencyContactPhone());
         profile.setEmploymentStatus(dto.getEmploymentStatus());
         profile.setBiometricPersonId(dto.getBiometricPersonId());
+        if (dto.getBasicSalary() != null) profile.setBasicSalary(dto.getBasicSalary());
         probationService.updateProbation(profile.getUser(), dto.getJoiningDate());
 
         EmployeeProfile saved = employeeProfileRepository.save(profile);

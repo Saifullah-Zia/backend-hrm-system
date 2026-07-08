@@ -37,6 +37,7 @@ public class EmployeeProfileDto {
     private Long positionId;
     private EmploymentStatus employmentStatus;
     private Integer biometricPersonId; // Hikvision device Employee ID
+    private Double basicSalary; // Base monthly salary used for payroll generation
 
     @CreatedDate
     private LocalDateTime createdAt;
