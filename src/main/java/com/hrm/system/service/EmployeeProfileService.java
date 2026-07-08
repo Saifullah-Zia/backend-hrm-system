@@ -180,10 +180,14 @@ public class EmployeeProfileService {
         }
 
         EmployeeProfile profile = toEntity(dto);
-        if (dto.getBasicSalary() != null && profile.getUser() != null) {
-            profile.getUser().setBasicSalary(dto.getBasicSalary());
-        }
         EmployeeProfile saved = employeeProfileRepository.save(profile);
+
+        // Sync basicSalary to User separately to avoid Hibernate cascade recursion
+        if (dto.getBasicSalary() != null && saved.getUser() != null) {
+            User user = saved.getUser();
+            user.setBasicSalary(dto.getBasicSalary());
+            userRepository.save(user);
+        }
 
         // ✅ MODIFIED: Pass the joiningDate to the probation service
         probationService.startProbation(saved.getUser(), saved.getJoiningDate());
@@ -229,15 +233,18 @@ public class EmployeeProfileService {
         profile.setEmergencyContactPhone(dto.getEmergencyContactPhone());
         profile.setEmploymentStatus(dto.getEmploymentStatus());
         profile.setBiometricPersonId(dto.getBiometricPersonId());
-        if (dto.getBasicSalary() != null) {
-            profile.setBasicSalary(dto.getBasicSalary());
-            if (profile.getUser() != null) {
-                profile.getUser().setBasicSalary(dto.getBasicSalary());
-            }
-        }
+        profile.setBasicSalary(dto.getBasicSalary() != null ? dto.getBasicSalary() : profile.getBasicSalary());
         probationService.updateProbation(profile.getUser(), dto.getJoiningDate());
 
         EmployeeProfile saved = employeeProfileRepository.save(profile);
+
+        // Sync basicSalary to User separately to avoid Hibernate cascade recursion
+        if (dto.getBasicSalary() != null && saved.getUser() != null) {
+            User user = saved.getUser();
+            user.setBasicSalary(dto.getBasicSalary());
+            userRepository.save(user);
+        }
+
         leavePolicyService.ensureEligibilityBalancesForUser(saved.getUser());
 
         return toDto(saved);
