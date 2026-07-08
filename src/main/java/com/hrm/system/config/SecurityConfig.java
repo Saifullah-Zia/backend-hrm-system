@@ -80,6 +80,7 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET, "/api/chat/files/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/leaves/files/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/documents/files/**").authenticated()
+                        .requestMatchers(HttpMethod.GET, "/api/notices/user/**").hasAnyRole("EMPLOYEE", "ADMIN", "SUPERADMIN")
                         .requestMatchers("/api/notices/**").hasAnyRole("ADMIN", "SUPERADMIN")
                         .anyRequest().authenticated()
                 )
