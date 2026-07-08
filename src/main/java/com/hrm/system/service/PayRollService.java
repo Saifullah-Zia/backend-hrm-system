@@ -260,6 +260,7 @@ public class PayRollService {
         return mapToDto(saved);
     }
 
+    @Transactional(readOnly = true)
     public List<PayRollDto> getPayrollsByPeriod(Long payrollPeriodId) {
         PayrollPeriod payrollPeriod = payrollPeriodRepository.findById(payrollPeriodId)
                 .orElseThrow(() -> new RuntimeException("Payroll period not found"));
@@ -347,21 +348,20 @@ public class PayRollService {
 
     // ─── Read all paginated ───────────────────────────────────────────────────
 
+    @Transactional(readOnly = true)
     public Page<PayRollDto> getAllPayroll(int page, int size) {
         Pageable pageable = PageRequest.of(page, size, Sort.by("id").descending());
         return payrollRepository.findAll(pageable).map(this::mapToDto);
     }
 
-    // ─── Read by ID ───────────────────────────────────────────────────────────
-
+    @Transactional(readOnly = true)
     public PayRollDto getPayrollById(long id) {
         Payroll payroll = payrollRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Payroll not found for ID: " + id));
         return mapToDto(payroll);
     }
 
-    // ─── Read by user ID paginated ────────────────────────────────────────────
-
+    @Transactional(readOnly = true)
     public Page<PayRollDto> getPayrollByUserId(Long userId, int page, int size) {
         Pageable pageable = PageRequest.of(page, size, Sort.by("id").descending());
         return payrollRepository.findByUserId(userId, pageable).map(this::mapToDto);
