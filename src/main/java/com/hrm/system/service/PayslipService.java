@@ -3,6 +3,7 @@ package com.hrm.system.service;
 import com.hrm.system.dto.PayRollDto;
 import com.hrm.system.model.Payroll;
 import com.hrm.system.model.PayrollItem;
+import com.hrm.system.model.PayrollStatus;
 import com.hrm.system.repository.PayrollItemRepository;
 import com.hrm.system.repository.PayrollRepository;
 import com.itextpdf.io.font.constants.StandardFonts;
@@ -17,13 +18,14 @@ import com.itextpdf.layout.element.Paragraph;
 import com.itextpdf.layout.element.Table;
 import com.itextpdf.layout.properties.TextAlignment;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.io.ByteArrayOutputStream;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 
 @Service
 public class PayslipService {
@@ -37,9 +39,25 @@ public class PayslipService {
         this.payrollItemRepository = payrollItemRepository;
     }
 
-    public Map<String, Object> getPayslipData(Long payrollId) {
+    /**
+     * Fetches payroll data for payslip generation, enforcing ownership and status rules.
+     *
+     * @param requestingUserId ID of the authenticated user making the request
+     * @param isPrivileged     true if requester is ADMIN or SUPERADMIN
+     */
+    @Transactional(readOnly = true)
+    public Map<String, Object> getPayslipData(Long payrollId, Long requestingUserId, boolean isPrivileged) {
         Payroll payroll = payrollRepository.findById(payrollId)
                 .orElseThrow(() -> new RuntimeException("Payroll not found"));
+
+        if (!isPrivileged) {
+            if (requestingUserId == null || !payroll.getUser().getId().equals(requestingUserId)) {
+                throw new AccessDeniedException("You are not authorized to view this payslip");
+            }
+            if (payroll.getStatus() != PayrollStatus.APPROVED && payroll.getStatus() != PayrollStatus.PAID) {
+                throw new AccessDeniedException("This payslip is not yet available for viewing");
+            }
+        }
 
         List<PayrollItem> items = payrollItemRepository.findByPayrollId(payrollId);
 
@@ -71,9 +89,9 @@ public class PayslipService {
         return payslipData;
     }
 
-    public String generatePayslipHtml(Long payrollId) {
-        Map<String, Object> data = getPayslipData(payrollId);
-        
+    public String generatePayslipHtml(Long payrollId, Long requestingUserId, boolean isPrivileged) {
+        Map<String, Object> data = getPayslipData(payrollId, requestingUserId, isPrivileged);
+
         StringBuilder html = new StringBuilder();
         html.append("<!DOCTYPE html>\n");
         html.append("<html>\n");
@@ -92,18 +110,18 @@ public class PayslipService {
         html.append("</style>\n");
         html.append("</head>\n");
         html.append("<body>\n");
-        
+
         html.append("<div class=\"header\">\n");
         html.append("<h1>PAYSLIP</h1>\n");
         html.append("<h2>").append(data.get("month")).append(" ").append(data.get("year")).append("</h2>\n");
         html.append("</div>\n");
-        
+
         html.append("<div class=\"section\">\n");
         html.append("<h3>Employee Information</h3>\n");
         html.append("<p><span class=\"label\">Name:</span><span class=\"value\">").append(data.get("employeeName")).append("</span></p>\n");
         html.append("<p><span class=\"label\">Email:</span><span class=\"value\">").append(data.get("employeeEmail")).append("</span></p>\n");
         html.append("</div>\n");
-        
+
         html.append("<div class=\"section\">\n");
         html.append("<h3>Attendance Summary</h3>\n");
         html.append("<p><span class=\"label\">Working Days:</span><span class=\"value\">").append(data.get("workingDays")).append("</span></p>\n");
@@ -113,7 +131,7 @@ public class PayslipService {
         html.append("<p><span class=\"label\">Unpaid Leave Days:</span><span class=\"value\">").append(data.get("unpaidLeaveDays")).append("</span></p>\n");
         html.append("<p><span class=\"label\">Absent Days:</span><span class=\"value\">").append(data.get("absentDays")).append("</span></p>\n");
         html.append("</div>\n");
-        
+
         html.append("<div class=\"section\">\n");
         html.append("<h3>Salary Breakdown</h3>\n");
         html.append("<p><span class=\"label\">Basic Salary:</span><span class=\"value\">PKR ").append(String.format("%.2f", data.get("basicSalary"))).append("</span></p>\n");
@@ -124,7 +142,7 @@ public class PayslipService {
         html.append("<p class=\"total\"><span class=\"label\">Gross Salary:</span><span class=\"value\">PKR ").append(String.format("%.2f", data.get("grossSalary"))).append("</span></p>\n");
         html.append("<p class=\"total\"><span class=\"label\">Net Salary:</span><span class=\"value\">PKR ").append(String.format("%.2f", data.get("netSalary"))).append("</span></p>\n");
         html.append("</div>\n");
-        
+
         html.append("<div class=\"section\">\n");
         html.append("<h3>Payment Status</h3>\n");
         html.append("<p><span class=\"label\">Status:</span><span class=\"value\">").append(data.get("status")).append("</span></p>\n");
@@ -132,56 +150,53 @@ public class PayslipService {
         html.append("<p><span class=\"label\">Approved At:</span><span class=\"value\">").append(data.get("approvedAt") != null ? data.get("approvedAt") : "N/A").append("</span></p>\n");
         html.append("<p><span class=\"label\">Paid At:</span><span class=\"value\">").append(data.get("paidAt") != null ? data.get("paidAt") : "N/A").append("</span></p>\n");
         html.append("</div>\n");
-        
+
         html.append("</body>\n");
         html.append("</html>\n");
-        
+
         return html.toString();
     }
 
-    public byte[] generatePayslipPdf(Long payrollId) {
-        Map<String, Object> data = getPayslipData(payrollId);
-        
+    public byte[] generatePayslipPdf(Long payrollId, Long requestingUserId, boolean isPrivileged) {
+        Map<String, Object> data = getPayslipData(payrollId, requestingUserId, isPrivileged);
+
         try (ByteArrayOutputStream outputStream = new ByteArrayOutputStream()) {
             PdfWriter writer = new PdfWriter(outputStream);
             PdfDocument pdf = new PdfDocument(writer);
             Document document = new Document(pdf);
-            
+
             PdfFont font = PdfFontFactory.createFont(StandardFonts.HELVETICA);
             PdfFont boldFont = PdfFontFactory.createFont(StandardFonts.HELVETICA_BOLD);
-            
-            // Header
+
             document.add(new Paragraph("PAYSLIP")
                     .setFont(boldFont)
                     .setFontSize(24)
                     .setTextAlignment(TextAlignment.CENTER)
                     .setMarginBottom(10));
-            
+
             document.add(new Paragraph(data.get("month") + " " + data.get("year"))
                     .setFont(font)
                     .setFontSize(16)
                     .setTextAlignment(TextAlignment.CENTER)
                     .setMarginBottom(30));
-            
-            // Employee Information
+
             document.add(new Paragraph("Employee Information")
                     .setFont(boldFont)
                     .setFontSize(14)
                     .setMarginBottom(10));
-            
+
             Table employeeTable = new Table(2);
             employeeTable.addCell(createCell("Name:", boldFont));
             employeeTable.addCell(createCell(data.get("employeeName").toString(), font));
             employeeTable.addCell(createCell("Email:", boldFont));
             employeeTable.addCell(createCell(data.get("employeeEmail").toString(), font));
             document.add(employeeTable.setMarginBottom(20));
-            
-            // Attendance Summary
+
             document.add(new Paragraph("Attendance Summary")
                     .setFont(boldFont)
                     .setFontSize(14)
                     .setMarginBottom(10));
-            
+
             Table attendanceTable = new Table(3);
             attendanceTable.addCell(createCell("Working Days:", boldFont));
             attendanceTable.addCell(createCell("Present Days:", boldFont));
@@ -196,13 +211,12 @@ public class PayslipService {
             attendanceTable.addCell(createCell(data.get("unpaidLeaveDays").toString(), font));
             attendanceTable.addCell(createCell(data.get("absentDays").toString(), font));
             document.add(attendanceTable.setMarginBottom(20));
-            
-            // Salary Breakdown
+
             document.add(new Paragraph("Salary Breakdown")
                     .setFont(boldFont)
                     .setFontSize(14)
                     .setMarginBottom(10));
-            
+
             Table salaryTable = new Table(2);
             salaryTable.addCell(createCell("Basic Salary:", boldFont));
             salaryTable.addCell(createCell("PKR " + String.format("%.2f", data.get("basicSalary")), font));
@@ -224,13 +238,12 @@ public class PayslipService {
             netSalaryCell.setFontSize(14);
             salaryTable.addCell(netSalaryCell);
             document.add(salaryTable.setMarginBottom(20));
-            
-            // Payment Status
+
             document.add(new Paragraph("Payment Status")
                     .setFont(boldFont)
                     .setFontSize(14)
                     .setMarginBottom(10));
-            
+
             Table statusTable = new Table(2);
             statusTable.addCell(createCell("Status:", boldFont));
             statusTable.addCell(createCell(data.get("status").toString(), font));
@@ -241,15 +254,15 @@ public class PayslipService {
             statusTable.addCell(createCell("Paid At:", boldFont));
             statusTable.addCell(createCell(data.get("paidAt") != null ? data.get("paidAt").toString() : "N/A", font));
             document.add(statusTable);
-            
+
             document.close();
-            
+
             return outputStream.toByteArray();
         } catch (Exception e) {
             throw new RuntimeException("Failed to generate PDF", e);
         }
     }
-    
+
     private Cell createCell(String text, PdfFont font) {
         return new Cell()
                 .add(new Paragraph(text).setFont(font))

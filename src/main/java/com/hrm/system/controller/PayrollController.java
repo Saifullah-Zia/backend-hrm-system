@@ -2,6 +2,7 @@ package com.hrm.system.controller;
 
 import com.hrm.system.dto.PayRollDto;
 import com.hrm.system.service.PayRollService;
+import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
 import org.springframework.http.HttpStatus;
@@ -17,6 +18,15 @@ public class PayrollController {
 
     @Autowired
     private PayRollService payRollService;
+
+    private Long getRequestingUserId(HttpServletRequest request) {
+        Object userId = request.getAttribute("userId");
+        return userId != null ? (Long) userId : null;
+    }
+
+    private boolean isPrivileged(HttpServletRequest request) {
+        return request.isUserInRole("ADMIN") || request.isUserInRole("SUPERADMIN");
+    }
 
     // ─── New payroll generation endpoints ─────────────────────────────────────
 
@@ -86,19 +96,26 @@ public class PayrollController {
         return ResponseEntity.ok(payRollService.getAllPayroll(page, size));
     }
 
+    // ─── Ownership-enforced endpoints ──────────────────────────────────────────
+
     @GetMapping("/user/{userId}")
     @PreAuthorize("hasRole('SUPERADMIN') or hasRole('ADMIN') or hasRole('EMPLOYEE')")
     public ResponseEntity<Page<PayRollDto>> getPayrollByUserId(
             @PathVariable Long userId,
             @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "10") int size) {
-        return ResponseEntity.ok(payRollService.getPayrollByUserId(userId, page, size));
+            @RequestParam(defaultValue = "10") int size,
+            HttpServletRequest request) {
+        Long requestingUserId = getRequestingUserId(request);
+        boolean privileged = isPrivileged(request);
+        return ResponseEntity.ok(payRollService.getPayrollByUserId(userId, page, size, requestingUserId, privileged));
     }
 
     @GetMapping("/{id}")
     @PreAuthorize("hasRole('SUPERADMIN') or hasRole('ADMIN') or hasRole('EMPLOYEE')")
-    public ResponseEntity<PayRollDto> getPayrollById(@PathVariable Long id) {
-        return ResponseEntity.ok(payRollService.getPayrollById(id));
+    public ResponseEntity<PayRollDto> getPayrollById(@PathVariable Long id, HttpServletRequest request) {
+        Long requestingUserId = getRequestingUserId(request);
+        boolean privileged = isPrivileged(request);
+        return ResponseEntity.ok(payRollService.getPayrollById(id, requestingUserId, privileged));
     }
 
     @PutMapping("/{id}")

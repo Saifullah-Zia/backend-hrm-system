@@ -9,6 +9,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -58,23 +59,19 @@ public class PayRollService {
         User employee = userRepository.findById(employeeId)
                 .orElseThrow(() -> new RuntimeException("Employee not found"));
 
-        // Check if payroll already exists for this employee and period
         Optional<Payroll> existing = payrollRepository.findByUserAndPayrollPeriod(employee, payrollPeriod);
         if (existing.isPresent()) {
             throw new RuntimeException("Payroll already exists for this employee and period");
         }
 
-        // Get attendance summary
         AttendanceSummary attendanceSummary = attendanceSummaryRepository
                 .findByEmployeeIdAndPayrollPeriodId(employeeId, payrollPeriodId)
                 .orElseThrow(() -> new RuntimeException("Attendance summary not found for this employee and period"));
 
-        // Calculate daily salary
         double basicSalary = employee.getBasicSalary() != null ? employee.getBasicSalary() : 0.0;
         int workingDays = attendanceSummary.getWorkingDays() != null ? attendanceSummary.getWorkingDays() : 26;
         double dailySalary = payrollCalculationService.calculateDailySalary(basicSalary, workingDays);
 
-        // Create payroll record
         Payroll payroll = new Payroll();
         payroll.setPayrollPeriod(payrollPeriod);
         payroll.setUser(employee);
@@ -93,14 +90,12 @@ public class PayRollService {
         payroll.setGeneratedBy(generatedBy);
         payroll.setGeneratedAt(LocalDateTime.now());
 
-        // Calculate gross salary
         int presentDays = attendanceSummary.getPresentDays() != null ? attendanceSummary.getPresentDays() : 0;
         int paidLeaveDays = attendanceSummary.getPaidLeaveDays() != null ? attendanceSummary.getPaidLeaveDays() : 0;
         double grossSalary = payrollCalculationService.calculateGrossSalary(
                 basicSalary, presentDays, paidLeaveDays, 0.0, 0.0);
         payroll.setGrossSalary(grossSalary);
 
-        // Calculate deductions
         int unpaidLeaveDays = attendanceSummary.getUnpaidLeaveDays() != null ? attendanceSummary.getUnpaidLeaveDays() : 0;
         int absentDays = attendanceSummary.getAbsentDays() != null ? attendanceSummary.getAbsentDays() : 0;
         int lateDays = attendanceSummary.getLateDays() != null ? attendanceSummary.getLateDays() : 0;
@@ -108,7 +103,6 @@ public class PayRollService {
                 unpaidLeaveDays, absentDays, lateDays, dailySalary, 0.0);
         payroll.setTotalDeductions(deductions);
 
-        // Calculate net salary
         double netSalary = payrollCalculationService.calculateNetSalary(grossSalary, deductions);
         payroll.setNetSalary(netSalary);
 
@@ -135,7 +129,6 @@ public class PayRollService {
             throw new RuntimeException("Payroll period must be locked before generating payroll");
         }
 
-        // Get all attendance summaries for this period
         List<AttendanceSummary> summaries = attendanceSummaryRepository.findAll().stream()
                 .filter(s -> s.getPayrollPeriod().getId().equals(payrollPeriodId))
                 .collect(Collectors.toList());
@@ -168,7 +161,7 @@ public class PayRollService {
         notificationService.createNotification(
                 payroll.getUser().getId(),
                 String.format("💰 Your payroll for %s %s has been approved. Net salary: %.2f",
-                        payroll.getPayrollPeriod().getMonth(), payroll.getPayrollPeriod().getYear(), 
+                        payroll.getPayrollPeriod().getMonth(), payroll.getPayrollPeriod().getYear(),
                         saved.getNetSalary()),
                 "PAYROLL",
                 payroll.getUser().getId(),
@@ -195,7 +188,7 @@ public class PayRollService {
         notificationService.createNotification(
                 payroll.getUser().getId(),
                 String.format("💰 Your payroll for %s %s has been paid. Amount: %.2f",
-                        payroll.getPayrollPeriod().getMonth(), payroll.getPayrollPeriod().getYear(), 
+                        payroll.getPayrollPeriod().getMonth(), payroll.getPayrollPeriod().getYear(),
                         saved.getNetSalary()),
                 "PAYROLL",
                 payroll.getUser().getId(),
@@ -218,10 +211,8 @@ public class PayRollService {
             throw new RuntimeException("Cannot regenerate paid payroll");
         }
 
-        // Delete existing payroll items
         payrollItemRepository.deleteByPayrollId(payrollId);
 
-        // Recalculate using attendance summary
         AttendanceSummary attendanceSummary = attendanceSummaryRepository
                 .findByEmployeeIdAndPayrollPeriodId(payroll.getUser().getId(), payroll.getPayrollPeriod().getId())
                 .orElseThrow(() -> new RuntimeException("Attendance summary not found"));
@@ -306,8 +297,6 @@ public class PayRollService {
         }
     }
 
-    // create payroll
-
     public PayRollDto createPayroll(PayRollDto dto) {
         User user = userRepository.findById(dto.getUserId())
                 .orElseThrow(() -> new RuntimeException("User not found with id: " + dto.getUserId()));
@@ -346,7 +335,7 @@ public class PayRollService {
         return mapToDto(saved);
     }
 
-    // ─── Read all paginated ───────────────────────────────────────────────────
+    // ─── Read all paginated (admin/superadmin only — enforced at controller level) ──
 
     @Transactional(readOnly = true)
     public Page<PayRollDto> getAllPayroll(int page, int size) {
@@ -354,21 +343,56 @@ public class PayRollService {
         return payrollRepository.findAll(pageable).map(this::mapToDto);
     }
 
+    // ─── Read by ID — now with ownership + status enforcement ─────────────────
+
+    /**
+     * @param requestingUserId the ID of the authenticated user making the request (from JWT)
+     * @param isPrivileged     true if the requester is ADMIN or SUPERADMIN
+     */
     @Transactional(readOnly = true)
-    public PayRollDto getPayrollById(long id) {
+    public PayRollDto getPayrollById(long id, Long requestingUserId, boolean isPrivileged) {
         Payroll payroll = payrollRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Payroll not found for ID: " + id));
+
+        if (!isPrivileged) {
+            if (requestingUserId == null || !payroll.getUser().getId().equals(requestingUserId)) {
+                throw new AccessDeniedException("You are not authorized to view this payroll record");
+            }
+            if (payroll.getStatus() != PayrollStatus.APPROVED && payroll.getStatus() != PayrollStatus.PAID) {
+                throw new AccessDeniedException("This payroll is not yet available for viewing");
+            }
+        }
+
         return mapToDto(payroll);
     }
 
+    // ─── Read by user ID paginated — now with ownership enforcement ───────────
+
     @Transactional(readOnly = true)
-    public Page<PayRollDto> getPayrollByUserId(Long userId, int page, int size) {
+    public Page<PayRollDto> getPayrollByUserId(Long userId, int page, int size, Long requestingUserId, boolean isPrivileged) {
+        if (!isPrivileged) {
+            if (requestingUserId == null || !userId.equals(requestingUserId)) {
+                throw new AccessDeniedException("You are not authorized to view these payroll records");
+            }
+        }
+
         Pageable pageable = PageRequest.of(page, size, Sort.by("id").descending());
-        return payrollRepository.findByUserId(userId, pageable).map(this::mapToDto);
+        Page<PayRollDto> result = payrollRepository.findByUserId(userId, pageable).map(this::mapToDto);
+
+        if (!isPrivileged) {
+            // Employees only ever see APPROVED/PAID payslips, never DRAFT/REVIEWED/ARCHIVED
+            List<PayRollDto> filtered = result.getContent().stream()
+                    .filter(dto -> "APPROVED".equals(dto.getStatus()) || "PAID".equals(dto.getStatus()))
+                    .collect(Collectors.toList());
+            return new org.springframework.data.domain.PageImpl<>(filtered, pageable, filtered.size());
+        }
+
+        return result;
     }
 
     // ─── Update ───────────────────────────────────────────────────────────────
 
+    @Transactional
     public PayRollDto updatePayroll(Long id, PayRollDto dto) {
         Payroll payroll = payrollRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Payroll not found for ID: " + id));

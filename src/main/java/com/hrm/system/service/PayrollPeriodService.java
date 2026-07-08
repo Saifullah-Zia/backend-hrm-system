@@ -90,6 +90,7 @@ public class PayrollPeriodService {
         return mapToDto(saved);
     }
 
+    @Transactional(readOnly = true)
     public boolean isPeriodLocked(String month, Integer year, String department) {
         Optional<PayrollPeriod> period;
         if (department != null && !department.isEmpty()) {
@@ -100,6 +101,7 @@ public class PayrollPeriodService {
         return period.isPresent() && period.get().getLocked();
     }
 
+    @Transactional(readOnly = true)
     public Optional<PayrollPeriodDto> getPayrollPeriod(String month, Integer year, String department) {
         Optional<PayrollPeriod> period;
         if (department != null && !department.isEmpty()) {
@@ -110,12 +112,14 @@ public class PayrollPeriodService {
         return period.map(this::mapToDto);
     }
 
+    @Transactional(readOnly = true)
     public List<PayrollPeriodDto> getAllPayrollPeriods() {
         return payrollPeriodRepository.findAll().stream()
                 .map(this::mapToDto)
                 .collect(Collectors.toList());
     }
 
+    @Transactional(readOnly = true)
     public PayrollPeriodDto getPayrollPeriodById(Long id) {
         PayrollPeriod payrollPeriod = payrollPeriodRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Payroll period not found"));
