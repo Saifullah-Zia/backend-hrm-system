@@ -19,19 +19,9 @@ public interface PayrollRepository extends JpaRepository<Payroll, Long> {
     // ─── Paginated ────────────────────────────────────────────────────────────
     Page<Payroll> findAll(Pageable pageable);
     Page<Payroll> findByUserId(Long userId, Pageable pageable);
-    Page<Payroll> findByStatus(String status, Pageable pageable);
-    Page<Payroll> findByYear(Integer year, Pageable pageable);
 
     // ─── Non-paginated (kept for internal use) ────────────────────────────────
     List<Payroll> findByUserId(Long userId);
-    boolean existsByUserAndMonth(User user, String month);
-    Optional<Payroll> findByUserAndMonth(User user, String month);
-
-    @Query("SELECT p FROM Payroll p WHERE p.user.id = :userId AND p.month = :month")
-    Optional<Payroll> findByUserIdAndMonth(@Param("userId") Long userId, @Param("month") String month);
-
-    List<Payroll> findByStatus(String status);
-    List<Payroll> findByYear(Integer year);
 
     // ─── Payroll period integration ───────────────────────────────────────────
     Optional<Payroll> findByUserAndPayrollPeriod(User user, PayrollPeriod payrollPeriod);

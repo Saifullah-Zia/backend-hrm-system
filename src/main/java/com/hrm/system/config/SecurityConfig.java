@@ -82,6 +82,24 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET, "/api/documents/files/**").authenticated()
                         .requestMatchers(HttpMethod.GET, "/api/notices/user/**").hasAnyRole("EMPLOYEE", "ADMIN", "SUPERADMIN")
                         .requestMatchers("/api/notices/**").hasAnyRole("ADMIN", "SUPERADMIN")
+                        // Payroll endpoints
+                        .requestMatchers(HttpMethod.POST, "/api/payroll/generate", "/api/payroll/generate/bulk").hasAnyRole("ADMIN", "SUPERADMIN")
+                        .requestMatchers(HttpMethod.PUT, "/api/payroll/*/approve", "/api/payroll/*/pay", "/api/payroll/*/regenerate").hasAnyRole("ADMIN", "SUPERADMIN")
+                        .requestMatchers(HttpMethod.GET, "/api/payroll/period/*").hasAnyRole("ADMIN", "SUPERADMIN")
+                        .requestMatchers(HttpMethod.POST, "/api/payroll").hasAnyRole("ADMIN", "SUPERADMIN")
+                        .requestMatchers(HttpMethod.PUT, "/api/payroll/*").hasAnyRole("ADMIN", "SUPERADMIN")
+                        .requestMatchers(HttpMethod.DELETE, "/api/payroll/*").hasRole("SUPERADMIN")
+                        .requestMatchers(HttpMethod.GET, "/api/payroll", "/api/payroll/*").hasAnyRole("EMPLOYEE", "ADMIN", "SUPERADMIN")
+                        .requestMatchers(HttpMethod.GET, "/api/payroll/user/*").hasAnyRole("EMPLOYEE", "ADMIN", "SUPERADMIN")
+                        // Payroll period endpoints
+                        .requestMatchers(HttpMethod.POST, "/api/payroll/periods", "/api/payroll/periods/*/lock", "/api/payroll/periods/*/unlock").hasAnyRole("ADMIN", "SUPERADMIN")
+                        .requestMatchers(HttpMethod.GET, "/api/payroll/periods", "/api/payroll/periods/*", "/api/payroll/periods/check").authenticated()
+                        // Payroll policy endpoints
+                        .requestMatchers(HttpMethod.POST, "/api/payroll/policies", "/api/payroll/policies/*").hasAnyRole("ADMIN", "SUPERADMIN")
+                        .requestMatchers(HttpMethod.GET, "/api/payroll/policies", "/api/payroll/policies/*", "/api/payroll/policies/active").hasAnyRole("ADMIN", "SUPERADMIN")
+                        // Payslip endpoints
+                        .requestMatchers(HttpMethod.POST, "/api/payslips/generate").hasAnyRole("ADMIN", "SUPERADMIN")
+                        .requestMatchers(HttpMethod.GET, "/api/payslips/*", "/api/payslips/download/*").hasAnyRole("EMPLOYEE", "ADMIN", "SUPERADMIN")
                         .anyRequest().authenticated()
                 )
                 .addFilterBefore(jwtFilter, UsernamePasswordAuthenticationFilter.class);
