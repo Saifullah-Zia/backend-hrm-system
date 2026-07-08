@@ -275,37 +275,32 @@ public class PayRollService {
         List<User> employees = userRepository.findAll();
 
         for (User employee : employees) {
-            String monthStr = String.format("%d-%02d", year, month);
+            Payroll payroll = new Payroll();
+            payroll.setUser(employee);
+            payroll.setBasicSalary(employee.getBasicSalary());
+            payroll.setTotalBonuses(0.0);
+            payroll.setTotalDeductions(0.0);
+            payroll.setNetSalary(employee.getBasicSalary());
+            payroll.setStatus(PayrollStatus.DRAFT);
 
-            boolean exists = payrollRepository.existsByUserAndMonth(employee, monthStr);
+            Payroll saved = payrollRepository.save(payroll);
 
-            if (!exists) {
-                Payroll payroll = new Payroll();
-                payroll.setUser(employee);
-                payroll.setBasicSalary(employee.getBasicSalary());
-                payroll.setTotalBonuses(0.0);
-                payroll.setTotalDeductions(0.0);
-                payroll.setNetSalary(employee.getBasicSalary());
-                payroll.setStatus(PayrollStatus.DRAFT);
+            notificationService.createNotification(
+                    employee.getId(),
+                    String.format("💰 Your payroll has been generated. Net salary: %.2f",
+                            employee.getBasicSalary()),
+                    "PAYROLL",
+                    employee.getId(),
+                    saved.getId()
+            );
 
-                Payroll saved = payrollRepository.save(payroll);
-
-                notificationService.createNotification(
-                        employee.getId(),
-                        String.format("💰 Your payroll for %s has been generated. Net salary: %.2f",
-                                monthStr, employee.getBasicSalary()),
-                        "PAYROLL",
-                        employee.getId(),
-                        saved.getId()
-                );
-
-                try {
-                    emailService.sendPayrollNotification(employee.getEmail(), monthStr, year);
-                    System.out.println("✓ Email sent successfully to: " + employee.getEmail());
-                } catch (Exception e) {
-                    System.err.println("✗ Email failed for: " + employee.getEmail());
-                    e.printStackTrace();
-                }
+            try {
+                String monthStr = String.format("%d-%02d", year, month);
+                emailService.sendPayrollNotification(employee.getEmail(), monthStr, year);
+                System.out.println("✓ Email sent successfully to: " + employee.getEmail());
+            } catch (Exception e) {
+                System.err.println("✗ Email failed for: " + employee.getEmail());
+                e.printStackTrace();
             }
         }
     }
