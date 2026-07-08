@@ -214,4 +214,46 @@ public class AttendanceService {
         if (entity.getUser() != null) dto.setUserId(entity.getUser().getId());
         return dto;
     }
+
+    // ── Leave Integration Helpers ─────────────────────────────────────────────
+
+    @Transactional
+    public void createOrUpdateAttendanceForLeave(Long userId, LocalDate date, String status) {
+        // Check if attendance record already exists (check-in takes priority)
+        Optional<Attendance> existing = attendanceRepository.findByUserIdAndDate(userId, date);
+        if (existing.isPresent()) {
+            // Don't override if employee already checked in
+            return;
+        }
+
+        // Create new attendance record for leave
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new EntityNotFoundException("User not found: " + userId));
+
+        Attendance attendance = new Attendance();
+        attendance.setUser(user);
+        attendance.setDate(date);
+        attendance.setStatus(status);
+        attendanceRepository.save(attendance);
+    }
+
+    @Transactional
+    public void markAbsentIfNoRecord(Long userId, LocalDate date) {
+        // Only mark absent if no attendance record exists
+        Optional<Attendance> existing = attendanceRepository.findByUserIdAndDate(userId, date);
+        if (existing.isPresent()) {
+            // Don't override existing record (check-in or leave)
+            return;
+        }
+
+        // Create absent record
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new EntityNotFoundException("User not found: " + userId));
+
+        Attendance attendance = new Attendance();
+        attendance.setUser(user);
+        attendance.setDate(date);
+        attendance.setStatus("ABSENT");
+        attendanceRepository.save(attendance);
+    }
 }
