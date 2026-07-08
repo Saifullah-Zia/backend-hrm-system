@@ -9,4 +9,5 @@ import java.util.List;
 @Repository
 public interface PayrollItemRepository extends JpaRepository<PayrollItem, Long> {
     List<PayrollItem> findByPayrollId(Long payrollId);
+    void deleteByPayrollId(Long payrollId);
 }

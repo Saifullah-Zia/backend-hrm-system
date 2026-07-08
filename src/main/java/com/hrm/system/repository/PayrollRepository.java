@@ -1,6 +1,7 @@
 package com.hrm.system.repository;
 
 import com.hrm.system.model.Payroll;
+import com.hrm.system.model.PayrollPeriod;
 import com.hrm.system.model.User;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -31,4 +32,8 @@ public interface PayrollRepository extends JpaRepository<Payroll, Long> {
 
     List<Payroll> findByStatus(String status);
     List<Payroll> findByYear(Integer year);
+
+    // ─── Payroll period integration ───────────────────────────────────────────
+    Optional<Payroll> findByUserAndPayrollPeriod(User user, PayrollPeriod payrollPeriod);
+    List<Payroll> findByPayrollPeriod(PayrollPeriod payrollPeriod);
 }

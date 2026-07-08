@@ -9,12 +9,67 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.List;
+
 @RestController
 @RequestMapping("/api/payroll")
 public class PayrollController {
 
     @Autowired
     private PayRollService payRollService;
+
+    // ─── New payroll generation endpoints ─────────────────────────────────────
+
+    @PostMapping("/generate")
+    @PreAuthorize("hasRole('SUPERADMIN') or hasRole('ADMIN')")
+    public ResponseEntity<PayRollDto> generatePayroll(
+            @RequestParam Long payrollPeriodId,
+            @RequestParam Long employeeId,
+            @RequestParam Long generatedBy) {
+        PayRollDto generated = payRollService.generatePayroll(payrollPeriodId, employeeId, generatedBy);
+        return new ResponseEntity<>(generated, HttpStatus.CREATED);
+    }
+
+    @PostMapping("/generate/bulk")
+    @PreAuthorize("hasRole('SUPERADMIN') or hasRole('ADMIN')")
+    public ResponseEntity<String> generateBulkPayroll(
+            @RequestParam Long payrollPeriodId,
+            @RequestParam Long generatedBy) {
+        payRollService.generateBulkPayroll(payrollPeriodId, generatedBy);
+        return ResponseEntity.ok("Bulk payroll generation initiated");
+    }
+
+    @PutMapping("/{id}/approve")
+    @PreAuthorize("hasRole('SUPERADMIN') or hasRole('ADMIN')")
+    public ResponseEntity<PayRollDto> approvePayroll(
+            @PathVariable Long id,
+            @RequestParam Long approvedBy) {
+        PayRollDto approved = payRollService.approvePayroll(id, approvedBy);
+        return ResponseEntity.ok(approved);
+    }
+
+    @PutMapping("/{id}/pay")
+    @PreAuthorize("hasRole('SUPERADMIN') or hasRole('ADMIN')")
+    public ResponseEntity<PayRollDto> markAsPaid(@PathVariable Long id) {
+        PayRollDto paid = payRollService.markAsPaid(id);
+        return ResponseEntity.ok(paid);
+    }
+
+    @PutMapping("/{id}/regenerate")
+    @PreAuthorize("hasRole('SUPERADMIN') or hasRole('ADMIN')")
+    public ResponseEntity<PayRollDto> regeneratePayroll(@PathVariable Long id) {
+        PayRollDto regenerated = payRollService.regeneratePayroll(id);
+        return ResponseEntity.ok(regenerated);
+    }
+
+    @GetMapping("/period/{periodId}")
+    @PreAuthorize("hasRole('SUPERADMIN') or hasRole('ADMIN')")
+    public ResponseEntity<List<PayRollDto>> getPayrollsByPeriod(@PathVariable Long periodId) {
+        List<PayRollDto> payrolls = payRollService.getPayrollsByPeriod(periodId);
+        return ResponseEntity.ok(payrolls);
+    }
+
+    // ─── Legacy endpoints (keep for backward compatibility) ───────────────────
 
     @PostMapping
     @PreAuthorize("hasRole('SUPERADMIN') or hasRole('ADMIN')")
