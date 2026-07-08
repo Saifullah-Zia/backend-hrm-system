@@ -5,9 +5,21 @@ import com.hrm.system.model.Payroll;
 import com.hrm.system.model.PayrollItem;
 import com.hrm.system.repository.PayrollItemRepository;
 import com.hrm.system.repository.PayrollRepository;
+import com.itextpdf.io.font.constants.StandardFonts;
+import com.itextpdf.kernel.colors.ColorConstants;
+import com.itextpdf.kernel.font.PdfFont;
+import com.itextpdf.kernel.font.PdfFontFactory;
+import com.itextpdf.kernel.pdf.PdfDocument;
+import com.itextpdf.kernel.pdf.PdfWriter;
+import com.itextpdf.layout.Document;
+import com.itextpdf.layout.element.Cell;
+import com.itextpdf.layout.element.Paragraph;
+import com.itextpdf.layout.element.Table;
+import com.itextpdf.layout.properties.TextAlignment;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
+import java.io.ByteArrayOutputStream;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -128,9 +140,119 @@ public class PayslipService {
     }
 
     public byte[] generatePayslipPdf(Long payrollId) {
-        // PDF generation will be implemented in Phase 6
-        // For now, return the HTML as bytes
-        String html = generatePayslipHtml(payrollId);
-        return html.getBytes();
+        Map<String, Object> data = getPayslipData(payrollId);
+        
+        try (ByteArrayOutputStream outputStream = new ByteArrayOutputStream()) {
+            PdfWriter writer = new PdfWriter(outputStream);
+            PdfDocument pdf = new PdfDocument(writer);
+            Document document = new Document(pdf);
+            
+            PdfFont font = PdfFontFactory.createFont(StandardFonts.HELVETICA);
+            PdfFont boldFont = PdfFontFactory.createFont(StandardFonts.HELVETICA_BOLD);
+            
+            // Header
+            document.add(new Paragraph("PAYSLIP")
+                    .setFont(boldFont)
+                    .setFontSize(24)
+                    .setTextAlignment(TextAlignment.CENTER)
+                    .setMarginBottom(10));
+            
+            document.add(new Paragraph(data.get("month") + " " + data.get("year"))
+                    .setFont(font)
+                    .setFontSize(16)
+                    .setTextAlignment(TextAlignment.CENTER)
+                    .setMarginBottom(30));
+            
+            // Employee Information
+            document.add(new Paragraph("Employee Information")
+                    .setFont(boldFont)
+                    .setFontSize(14)
+                    .setMarginBottom(10));
+            
+            Table employeeTable = new Table(2);
+            employeeTable.addCell(createCell("Name:", boldFont));
+            employeeTable.addCell(createCell(data.get("employeeName").toString(), font));
+            employeeTable.addCell(createCell("Email:", boldFont));
+            employeeTable.addCell(createCell(data.get("employeeEmail").toString(), font));
+            document.add(employeeTable.setMarginBottom(20));
+            
+            // Attendance Summary
+            document.add(new Paragraph("Attendance Summary")
+                    .setFont(boldFont)
+                    .setFontSize(14)
+                    .setMarginBottom(10));
+            
+            Table attendanceTable = new Table(3);
+            attendanceTable.addCell(createCell("Working Days:", boldFont));
+            attendanceTable.addCell(createCell("Present Days:", boldFont));
+            attendanceTable.addCell(createCell("Late Days:", boldFont));
+            attendanceTable.addCell(createCell(data.get("workingDays").toString(), font));
+            attendanceTable.addCell(createCell(data.get("presentDays").toString(), font));
+            attendanceTable.addCell(createCell(data.get("lateDays").toString(), font));
+            attendanceTable.addCell(createCell("Paid Leave:", boldFont));
+            attendanceTable.addCell(createCell("Unpaid Leave:", boldFont));
+            attendanceTable.addCell(createCell("Absent Days:", boldFont));
+            attendanceTable.addCell(createCell(data.get("paidLeaveDays").toString(), font));
+            attendanceTable.addCell(createCell(data.get("unpaidLeaveDays").toString(), font));
+            attendanceTable.addCell(createCell(data.get("absentDays").toString(), font));
+            document.add(attendanceTable.setMarginBottom(20));
+            
+            // Salary Breakdown
+            document.add(new Paragraph("Salary Breakdown")
+                    .setFont(boldFont)
+                    .setFontSize(14)
+                    .setMarginBottom(10));
+            
+            Table salaryTable = new Table(2);
+            salaryTable.addCell(createCell("Basic Salary:", boldFont));
+            salaryTable.addCell(createCell("PKR " + String.format("%.2f", data.get("basicSalary")), font));
+            salaryTable.addCell(createCell("Daily Salary:", boldFont));
+            salaryTable.addCell(createCell("PKR " + String.format("%.2f", data.get("dailySalary")), font));
+            salaryTable.addCell(createCell("Total Allowances:", boldFont));
+            salaryTable.addCell(createCell("PKR " + String.format("%.2f", data.get("totalAllowances")), font));
+            salaryTable.addCell(createCell("Total Bonuses:", boldFont));
+            salaryTable.addCell(createCell("PKR " + String.format("%.2f", data.get("totalBonuses")), font));
+            salaryTable.addCell(createCell("Total Deductions:", boldFont));
+            Cell deductionCell = createCell("- PKR " + String.format("%.2f", data.get("totalDeductions")), font);
+            deductionCell.setFontColor(ColorConstants.RED);
+            salaryTable.addCell(deductionCell);
+            salaryTable.addCell(createCell("Gross Salary:", boldFont));
+            salaryTable.addCell(createCell("PKR " + String.format("%.2f", data.get("grossSalary")), boldFont));
+            salaryTable.addCell(createCell("Net Salary:", boldFont));
+            Cell netSalaryCell = createCell("PKR " + String.format("%.2f", data.get("netSalary")), boldFont);
+            netSalaryCell.setFontColor(ColorConstants.GREEN);
+            netSalaryCell.setFontSize(14);
+            salaryTable.addCell(netSalaryCell);
+            document.add(salaryTable.setMarginBottom(20));
+            
+            // Payment Status
+            document.add(new Paragraph("Payment Status")
+                    .setFont(boldFont)
+                    .setFontSize(14)
+                    .setMarginBottom(10));
+            
+            Table statusTable = new Table(2);
+            statusTable.addCell(createCell("Status:", boldFont));
+            statusTable.addCell(createCell(data.get("status").toString(), font));
+            statusTable.addCell(createCell("Generated At:", boldFont));
+            statusTable.addCell(createCell(data.get("generatedAt").toString(), font));
+            statusTable.addCell(createCell("Approved At:", boldFont));
+            statusTable.addCell(createCell(data.get("approvedAt") != null ? data.get("approvedAt").toString() : "N/A", font));
+            statusTable.addCell(createCell("Paid At:", boldFont));
+            statusTable.addCell(createCell(data.get("paidAt") != null ? data.get("paidAt").toString() : "N/A", font));
+            document.add(statusTable);
+            
+            document.close();
+            
+            return outputStream.toByteArray();
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to generate PDF", e);
+        }
+    }
+    
+    private Cell createCell(String text, PdfFont font) {
+        return new Cell()
+                .add(new Paragraph(text).setFont(font))
+                .setPadding(5);
     }
 }
