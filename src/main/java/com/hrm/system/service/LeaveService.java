@@ -85,7 +85,7 @@ public class LeaveService {
             }
         }
 
-        // ── 5. Probation check: only UNPAID leave allowed ───────────────────────
+        // 5. Probation check: only UNPAID leave allowed
         if (leaveEligibilityService.isOnProbation(user)) {
             if (!leaveType.equals("UNPAID")) {
                 throw new RuntimeException(
@@ -93,7 +93,7 @@ public class LeaveService {
             }
         }
 
-        // ── 6. Calculate duration ─────────────────────────────────────────────
+        // ── 6. Calculate duration
         int duration = (int) ChronoUnit.DAYS.between(dto.getStartDate(), dto.getEndDate()) + 1;
 
         // ── 7. Balance check — throws descriptive error if insufficient ───────
@@ -102,7 +102,7 @@ public class LeaveService {
             leaveBalanceService.validateSufficientBalance(user.getId(), leaveType, duration);
         }
 
-        // ── 8. Persist leave ──────────────────────────────────────────────────
+        // ── 8. Persist leave 
         Leave leave = Leave.builder()
                 .user(user)
                 .type(leaveType)
