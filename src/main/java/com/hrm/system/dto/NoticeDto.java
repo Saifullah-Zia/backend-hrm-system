@@ -12,7 +12,7 @@ import java.time.LocalDateTime;
 @AllArgsConstructor
 public class NoticeDto {
     private Long id;
-    private Long userId;
+    private Object userId; // Accept both String and Long for flexibility
     private String employeeName;
     private String noticeType;
     private String title;

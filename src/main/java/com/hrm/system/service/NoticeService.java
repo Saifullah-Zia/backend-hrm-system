@@ -62,11 +62,21 @@ public class NoticeService {
     // ── Send Notice ───────────────────────────────────────────────────────────
     @Transactional
     public com.hrm.system.dto.NoticeDto sendNotice(com.hrm.system.dto.NoticeDto dto) {
-        User employee = userRepository.findById(dto.getUserId())
-                .orElseThrow(() -> new RuntimeException("Employee not found: " + dto.getUserId()));
+        // Convert userId to Long if it's a String
+        Long userIdLong;
+        if (dto.getUserId() instanceof String) {
+            userIdLong = Long.parseLong((String) dto.getUserId());
+        } else if (dto.getUserId() instanceof Long) {
+            userIdLong = (Long) dto.getUserId();
+        } else {
+            throw new RuntimeException("Invalid userId type: " + dto.getUserId());
+        }
+
+        User employee = userRepository.findById(userIdLong)
+                .orElseThrow(() -> new RuntimeException("Employee not found: " + userIdLong));
 
         Notice notice = new Notice();
-        notice.setUserId(dto.getUserId());
+        notice.setUserId(userIdLong);
         notice.setNoticeType(Notice.NoticeType.valueOf(dto.getNoticeType().toUpperCase()));
         notice.setTitle(dto.getTitle());
         notice.setDescription(dto.getDescription());
