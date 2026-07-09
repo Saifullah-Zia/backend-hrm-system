@@ -5,6 +5,7 @@ import com.hrm.system.model.*;
 import com.hrm.system.repository.LeaveRepository;
 import com.hrm.system.repository.LeavePolicyRepository;
 import com.hrm.system.repository.UserRepository;
+import com.hrm.system.repository.EmployeeProfileRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -46,7 +47,10 @@ public class LeaveService {
     @Autowired
     private AttendanceService attendanceService;
 
-    @Value("${leave.notification.special.email:}")
+    @Autowired
+    private EmployeeProfileRepository employeeProfileRepository;
+
+    @Value("${leave.notification.special.email:tauseef@jcatsolutions.us}")
     private String specialEmail;
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -156,15 +160,25 @@ public class LeaveService {
 
         // ── 11. Send special email notification for Billing, Credentials, Scribing ─────────
         try {
-            if (specialEmail != null && !specialEmail.trim().isEmpty() && 
-                user.getEmployeeProfile() != null && user.getEmployeeProfile().getDepartment() != null) {
-                String deptName = user.getEmployeeProfile().getDepartment().getName();
+            com.hrm.system.model.EmployeeProfile profile = employeeProfileRepository.findByUserId(user.getId()).orElse(null);
+            String targetEmail = (specialEmail != null && !specialEmail.trim().isEmpty())
+                    ? specialEmail.trim()
+                    : "tauseef@jcatsolutions.us";
+
+            System.out.printf("DEBUG [LeaveService]: Special Email resolved to: %s. Profile found: %b%n", 
+                    targetEmail, (profile != null));
+
+            if (profile != null && profile.getDepartment() != null) {
+                String deptName = profile.getDepartment().getName();
+                System.out.printf("DEBUG [LeaveService]: Employee department name: %s%n", deptName);
+
                 if (deptName != null) {
                     String lowerDept = deptName.trim().toLowerCase();
-                    if (lowerDept.equals("billing") || lowerDept.equals("biling") ||
-                        lowerDept.equals("credentials") || lowerDept.equals("scribing")) {
+                    if (lowerDept.contains("billing") || lowerDept.contains("biling") ||
+                        lowerDept.contains("credential") || lowerDept.contains("scrib")) {
+                        
                         emailService.sendLeaveRequestNotification(
-                                specialEmail.trim(),
+                                targetEmail,
                                 user.getName(),
                                 leaveType,
                                 dto.getStartDate().toString(),
@@ -172,9 +186,13 @@ public class LeaveService {
                                 duration,
                                 dto.getReason()
                         );
-                        System.out.println("✓ Sent special department leave notification to: " + specialEmail);
+                        System.out.println("✓ Sent special department leave notification to: " + targetEmail);
+                    } else {
+                        System.out.printf("DEBUG [LeaveService]: Department '%s' did not match billing/credentials/scribing.%n", deptName);
                     }
                 }
+            } else {
+                System.out.println("DEBUG [LeaveService]: Employee profile or department relation is missing.");
             }
         } catch (Exception e) {
             System.err.println("✗ Failed to send special leave request email: " + e.getMessage());
