@@ -423,10 +423,10 @@ public class EmailService {
                         <p>JCAT Solutions HRM System</p>
                     </div>
                     <div class="content">
-                        <p>Hello <strong>%s</strong>,</p>
+                        <p>Hello <strong>[ADMIN_NAME]</strong>,</p>
                         <p>You requested to reveal an employee's salary. Use the verification code below to confirm your identity:</p>
                         <div class="otp-box">
-                            <div class="otp-code">%06d</div>
+                            <div class="otp-code">[OTP_CODE]</div>
                             <div class="otp-label">Verification Code</div>
                         </div>
                         <div class="info">
@@ -439,7 +439,7 @@ public class EmailService {
                 </div>
             </body>
             </html>
-        """.formatted(adminName, code);
+        """.replace("[ADMIN_NAME]", adminName).replace("[OTP_CODE]", String.format("%06d", code));
 
         String apiKey = System.getenv("RESEND_API_KEY");
         if (apiKey != null && !apiKey.trim().isEmpty()) {
