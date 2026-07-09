@@ -17,6 +17,7 @@ import org.springframework.security.core.Authentication;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import com.hrm.system.service.OfficeHoursService;
 
 import java.time.*;
 import java.util.List;
