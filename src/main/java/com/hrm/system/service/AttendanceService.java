@@ -227,16 +227,41 @@ public class AttendanceService {
 
     // ── Leave Integration Helpers ─────────────────────────────────────────────
 
+    /**
+     * Creates or updates the attendance record for an approved leave day.
+     *
+     * IMPORTANT: this method is called from LeaveService.approveLeave() for every
+     * day in the leave range. It must NOT blindly skip when a record already exists,
+     * because the nightly "mark absent" job may have already created an ABSENT
+     * placeholder for that date before the leave got approved (e.g. leave approved
+     * late, or the absent job ran while a request was still PENDING).
+     *
+     * Rule:
+     *  - If the employee actually checked in (checkIn != null) → never touch it,
+     *    a real check-in always wins.
+     *  - Otherwise (no record, or a placeholder ABSENT/other record with no check-in)
+     *    → set/overwrite the status with the leave status (ON_LEAVE / UNPAID_LEAVE).
+     */
     @Transactional
     public void createOrUpdateAttendanceForLeave(Long userId, LocalDate date, String status) {
-        // Check if attendance record already exists (check-in takes priority)
         Optional<Attendance> existing = attendanceRepository.findByUserIdAndDate(userId, date);
+
         if (existing.isPresent()) {
-            // Don't override if employee already checked in
+            Attendance attendance = existing.get();
+
+            // Don't override a real check-in — employee actually showed up.
+            if (attendance.getCheckIn() != null) {
+                return;
+            }
+
+            // Safe to overwrite a no-check-in placeholder (e.g. stale ABSENT record)
+            // with the correct leave status.
+            attendance.setStatus(status);
+            attendanceRepository.save(attendance);
             return;
         }
 
-        // Create new attendance record for leave
+        // No record yet — create a fresh one for the leave day.
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new EntityNotFoundException("User not found: " + userId));
 
@@ -373,7 +398,10 @@ public class AttendanceService {
 
     // ── Scheduled Job: Mark Absences ─────────────────────────────────────────────
 
-    @Scheduled(cron = "0 30 2 * * *") // runs 2:30 AM PKT daily — 30 min after shift end (2 AM)
+    // Explicit zone = "Asia/Karachi" so this fires at 2:30 AM PKT regardless of the
+    // server/container's default timezone (Railway containers default to UTC, which
+    // was previously causing this to fire at 2:30 AM UTC == 7:30 AM PKT).
+    @Scheduled(cron = "0 30 2 * * *", zone = "Asia/Karachi") // runs 2:30 AM PKT daily — 30 min after shift end (2 AM)
     @Transactional
     public void markAllAbsentForYesterday() {
         // Shift starts 5 PM and ends ~2 AM next day, so the "attendance date"
