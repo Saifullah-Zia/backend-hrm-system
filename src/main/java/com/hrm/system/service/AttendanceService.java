@@ -3,10 +3,7 @@ package com.hrm.system.service;
 import com.hrm.system.config.AppTimeZone;
 import com.hrm.system.dto.AttendanceDto;
 import com.hrm.system.dto.AttendanceSummaryDto;
-import com.hrm.system.model.Attendance;
-import com.hrm.system.model.AttendanceSummary;
-import com.hrm.system.model.PayrollPeriod;
-import com.hrm.system.model.User;
+import com.hrm.system.model.*;
 import com.hrm.system.repository.AttendanceRepository;
 import com.hrm.system.repository.AttendanceSummaryRepository;
 import com.hrm.system.repository.PayrollPeriodRepository;
@@ -376,7 +373,11 @@ public class AttendanceService {
         // Shift starts 5 PM and ends ~2 AM next day, so the "attendance date"
         // for a shift that started yesterday evening is still yesterday's date.
         LocalDate shiftDate = LocalDate.now(AppTimeZone.PKT).minusDays(1);
-        List<User> allUsers = userRepository.findAll();
+
+        // Exclude ADMIN/SUPERADMIN — they are not tracked for daily attendance.
+        List<User> allUsers = userRepository.findAll().stream()
+                .filter(u -> u.getRole() != Role.ADMIN && u.getRole() != Role.SUPERADMIN)
+                .collect(Collectors.toList());
 
         for (User user : allUsers) {
             try {
