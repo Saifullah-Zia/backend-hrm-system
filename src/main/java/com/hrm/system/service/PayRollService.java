@@ -150,11 +150,9 @@ public class PayRollService {
         // Step 1: Generate attendance summaries for all active employees first
         attendanceService.generateBulkAttendanceSummaries(payrollPeriodId);
 
-        // Step 2: Get the summaries for this period
+        // Step 2: Get the summaries for this period eagerly fetching employee
+        List<AttendanceSummary> summaries = attendanceSummaryRepository.findByPayrollPeriodIdWithEmployee(payrollPeriodId);
         List<AttendanceSummary> allSummaries = attendanceSummaryRepository.findAll();
-        List<AttendanceSummary> summaries = allSummaries.stream()
-                .filter(s -> s.getPayrollPeriod().getId().equals(payrollPeriodId))
-                .collect(Collectors.toList());
 
         int generated = 0;
         int skipped   = 0;
