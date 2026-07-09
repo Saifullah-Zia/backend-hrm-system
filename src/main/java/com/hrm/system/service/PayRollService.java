@@ -133,7 +133,7 @@ public class PayRollService {
     // NOTE: intentionally NOT @Transactional — each employee runs in its own
     // independent REQUIRES_NEW transaction inside payrollGenerationHelper.
     // This prevents a single failure from marking the whole batch as rollback-only.
-    public void generateBulkPayroll(Long payrollPeriodId, Long generatedBy) {
+    public String generateBulkPayroll(Long payrollPeriodId, Long generatedBy) {
         PayrollPeriod payrollPeriod = payrollPeriodRepository.findById(payrollPeriodId)
                 .orElseThrow(() -> new RuntimeException("Payroll period not found"));
 
@@ -141,34 +141,54 @@ public class PayRollService {
             throw new RuntimeException("Payroll period must be locked before generating payroll");
         }
 
+        // Get total users and active employees for logging
+        List<User> allUsers = userRepository.findAll();
+        List<User> employees = allUsers.stream()
+                .filter(u -> u.getRole() != null && u.getRole() == Role.EMPLOYEE)
+                .collect(Collectors.toList());
+
         // Step 1: Generate attendance summaries for all active employees first
         attendanceService.generateBulkAttendanceSummaries(payrollPeriodId);
 
         // Step 2: Get the summaries for this period
-        List<AttendanceSummary> summaries = attendanceSummaryRepository.findAll().stream()
+        List<AttendanceSummary> allSummaries = attendanceSummaryRepository.findAll();
+        List<AttendanceSummary> summaries = allSummaries.stream()
                 .filter(s -> s.getPayrollPeriod().getId().equals(payrollPeriodId))
                 .collect(Collectors.toList());
 
         int generated = 0;
         int skipped   = 0;
         int failed    = 0;
+        StringBuilder details = new StringBuilder();
 
         // Step 3: Process each employee in its own independent transaction
         for (AttendanceSummary summary : summaries) {
             try {
                 boolean created = payrollGenerationHelper.generatePayrollForEmployee(
                         payrollPeriodId, summary.getEmployee().getId(), generatedBy);
-                if (created) generated++; else skipped++;
+                if (created) {
+                    generated++;
+                    details.append(String.format("Generated for %s (ID: %d). ", summary.getEmployee().getName(), summary.getEmployee().getId()));
+                } else {
+                    skipped++;
+                    details.append(String.format("Skipped for %s (ID: %d) - already exists. ", summary.getEmployee().getName(), summary.getEmployee().getId()));
+                }
             } catch (Exception e) {
                 failed++;
+                details.append(String.format("Failed for %s (ID: %d): %s. ", summary.getEmployee().getName(), summary.getEmployee().getId(), e.getMessage()));
                 System.err.println("✗ Failed to generate payroll for employee "
                         + summary.getEmployee().getId() + ": " + e.getMessage());
                 e.printStackTrace();
             }
         }
 
-        System.out.printf("Bulk payroll complete: %d generated, %d skipped, %d failed%n",
-                generated, skipped, failed);
+        String result = String.format("Bulk payroll complete: %d generated, %d skipped, %d failed. " +
+                "Total users in system: %d. Employees found with Role.EMPLOYEE: %d. " +
+                "Total summaries in system: %d. Summaries for this period: %d. " +
+                "Details: %s",
+                generated, skipped, failed, allUsers.size(), employees.size(), allSummaries.size(), summaries.size(), details.toString());
+        System.out.println(result);
+        return result;
     }
 
     @Transactional

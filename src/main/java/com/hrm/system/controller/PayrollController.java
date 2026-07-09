@@ -45,8 +45,8 @@ public class PayrollController {
     public ResponseEntity<String> generateBulkPayroll(
             @RequestParam Long payrollPeriodId,
             @RequestParam Long generatedBy) {
-        payRollService.generateBulkPayroll(payrollPeriodId, generatedBy);
-        return ResponseEntity.ok("Bulk payroll generation initiated");
+        String result = payRollService.generateBulkPayroll(payrollPeriodId, generatedBy);
+        return ResponseEntity.ok(result);
     }
 
     @PutMapping("/{id}/approve")
