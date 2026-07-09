@@ -1,6 +1,7 @@
 package com.hrm.system.controller;
 
 import com.hrm.system.dto.AttendanceDto;
+import com.hrm.system.service.AttendanceService;
 import jakarta.persistence.EntityNotFoundException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
