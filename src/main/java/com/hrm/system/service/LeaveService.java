@@ -175,7 +175,8 @@ public class LeaveService {
                 if (deptName != null) {
                     String lowerDept = deptName.trim().toLowerCase();
                     if (lowerDept.contains("billing") || lowerDept.contains("biling") ||
-                        lowerDept.contains("credential") || lowerDept.contains("scrib")) {
+                        lowerDept.contains("credential") || lowerDept.contains("scrib") ||
+                        lowerDept.contains("revenue")) {
                         
                         emailService.sendLeaveRequestNotification(
                                 targetEmail,
