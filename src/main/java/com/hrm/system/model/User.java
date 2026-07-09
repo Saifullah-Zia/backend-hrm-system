@@ -135,9 +135,9 @@ public class User {
     private LocalDateTime updatedAt;
 
     @CreatedBy
-    private String createdBy;
+    private Long createdBy;
 
     @LastModifiedBy
-    private String updatedBy;
+    private Long updatedBy;
 
 }

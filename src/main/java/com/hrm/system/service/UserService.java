@@ -146,10 +146,6 @@ public class UserService implements UserDetailsService {
                         .orElseThrow(() -> new UsernameNotFoundException(
                                 "User not found: " + username)));
 
-        return org.springframework.security.core.userdetails.User
-                .withUsername(user.getName())          // must match JWT subject
-                .password(user.getPassword())
-                .authorities("ROLE_" + user.getRole().name())
-                .build();
+        return new com.hrm.system.security.CustomUserDetails(user);
     }
 }

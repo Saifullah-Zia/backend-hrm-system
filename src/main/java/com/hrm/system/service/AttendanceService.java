@@ -17,6 +17,7 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.security.core.Authentication;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -365,5 +366,25 @@ public class AttendanceService {
         dto.setWorkingDays(summary.getWorkingDays());
         dto.setCreatedAt(summary.getCreatedAt());
         return dto;
+    }
+
+    // ── Scheduled Job: Mark Absences ─────────────────────────────────────────────
+
+    @Scheduled(cron = "0 30 2 * * *") // runs 2:30 AM PKT daily — 30 min after shift end (2 AM)
+    @Transactional
+    public void markAllAbsentForYesterday() {
+        // Shift starts 5 PM and ends ~2 AM next day, so the "attendance date"
+        // for a shift that started yesterday evening is still yesterday's date.
+        LocalDate shiftDate = LocalDate.now(AppTimeZone.PKT).minusDays(1);
+        List<User> allUsers = userRepository.findAll();
+
+        for (User user : allUsers) {
+            try {
+                markAbsentIfNoRecord(user.getId(), shiftDate);
+            } catch (Exception e) {
+                System.err.println("Failed to mark absent for user " + user.getId() + " on " + shiftDate);
+                e.printStackTrace();
+            }
+        }
     }
 }

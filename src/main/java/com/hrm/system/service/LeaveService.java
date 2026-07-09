@@ -11,6 +11,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
@@ -40,6 +41,9 @@ public class LeaveService {
 
     @Autowired
     private EmailService emailService;
+
+    @Autowired
+    private AttendanceService attendanceService;
 
     // ─────────────────────────────────────────────────────────────────────────
     // Apply for leave
@@ -173,6 +177,19 @@ public class LeaveService {
         // Move from pending → used in balance
         leaveBalanceService.convertPendingToUsed(
                 leave.getUser().getId(), leave.getType(), leave.getDurationDays());
+
+        // Mark attendance as ON_LEAVE or UNPAID_LEAVE for every day in the approved range
+        LocalDate date = leave.getStartDate();
+        while (!date.isAfter(leave.getEndDate())) {
+            DayOfWeek dayOfWeek = date.getDayOfWeek();
+            // Skip weekends (Saturday, Sunday)
+            if (dayOfWeek != DayOfWeek.SATURDAY && dayOfWeek != DayOfWeek.SUNDAY) {
+                String attendanceStatus = leave.getType().equals("UNPAID") ? "UNPAID_LEAVE" : "ON_LEAVE";
+                attendanceService.createOrUpdateAttendanceForLeave(
+                        leave.getUser().getId(), date, attendanceStatus);
+            }
+            date = date.plusDays(1);
+        }
 
         notificationService.createNotification(
                 leave.getUser().getId(),
