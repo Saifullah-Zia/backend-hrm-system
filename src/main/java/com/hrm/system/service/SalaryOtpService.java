@@ -19,9 +19,13 @@ public class SalaryOtpService {
 
     private static final int OTP_EXPIRY_SECONDS = 300; // 5 minutes
     private static final int OTP_LENGTH = 6;
+    private static final int REVEAL_TOKEN_EXPIRY_SECONDS = 600; // 10 minutes
 
     /** In-memory store: adminUserId → OtpEntry */
     private final ConcurrentHashMap<Long, OtpEntry> otpStore = new ConcurrentHashMap<>();
+
+    /** In-memory store: revealTokenValue → RevealTokenEntry */
+    private final ConcurrentHashMap<String, RevealTokenEntry> revealTokenStore = new ConcurrentHashMap<>();
 
     @Autowired
     private UserRepository userRepository;
@@ -70,6 +74,30 @@ public class SalaryOtpService {
         return match;
     }
 
+    /**
+     * Generates a secure random reveal token for the admin, valid for 10 minutes.
+     */
+    public String generateRevealToken(Long adminUserId) {
+        String token = java.util.UUID.randomUUID().toString();
+        Instant expiry = Instant.now().plusSeconds(REVEAL_TOKEN_EXPIRY_SECONDS);
+        revealTokenStore.put(token, new RevealTokenEntry(adminUserId, expiry));
+        return token;
+    }
+
+    /**
+     * Validates whether the given reveal token is active, not expired, and belongs to the given admin.
+     */
+    public boolean isRevealTokenValid(String token, Long adminUserId) {
+        if (token == null || token.trim().isEmpty() || adminUserId == null) return false;
+        RevealTokenEntry entry = revealTokenStore.get(token.trim());
+        if (entry == null) return false;
+        if (Instant.now().isAfter(entry.expiry())) {
+            revealTokenStore.remove(token.trim());
+            return false;
+        }
+        return entry.adminUserId().equals(adminUserId);
+    }
+
     // ── Helpers ───────────────────────────────────────────────────────────────
 
     private int generateCode() {
@@ -80,4 +108,7 @@ public class SalaryOtpService {
 
     /** Immutable value object to hold an OTP and its expiry timestamp. */
     private record OtpEntry(String code, Instant expiry) {}
+
+    /** Immutable value object to hold a reveal token and its expiry. */
+    private record RevealTokenEntry(Long adminUserId, Instant expiry) {}
 }

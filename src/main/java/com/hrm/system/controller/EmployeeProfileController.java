@@ -24,9 +24,15 @@ public class EmployeeProfileController {
     private final EmployeeProfileService employeeProfileService;
     private final SalaryOtpService salaryOtpService;
 
+    private boolean checkRevealSalary(HttpServletRequest request) {
+        String token = request.getHeader("X-Salary-Reveal-Token");
+        Long adminUserId = (Long) request.getAttribute("userId");
+        return salaryOtpService.isRevealTokenValid(token, adminUserId);
+    }
+
     @GetMapping
-    public ResponseEntity<List<EmployeeProfileDto>> getAll() {
-        return ResponseEntity.ok(employeeProfileService.getAll());
+    public ResponseEntity<List<EmployeeProfileDto>> getAll(HttpServletRequest request) {
+        return ResponseEntity.ok(employeeProfileService.getAll(checkRevealSalary(request)));
     }
 
     @GetMapping("/paged")
@@ -36,7 +42,8 @@ public class EmployeeProfileController {
             @RequestParam(defaultValue = "firstName") String sortBy,
             @RequestParam(defaultValue = "asc")  String sortDir,
             @RequestParam(required = false)      String search,
-            @RequestParam(required = false)      Long departmentId) {
+            @RequestParam(required = false)      Long departmentId,
+            HttpServletRequest request) {
 
         Sort sort = sortDir.equalsIgnoreCase("desc")
                 ? Sort.by(sortBy).descending()
@@ -44,20 +51,22 @@ public class EmployeeProfileController {
 
         Pageable pageable = PageRequest.of(page, size, sort);
         return ResponseEntity.ok(
-                employeeProfileService.getPaged(search, departmentId, pageable));
+                employeeProfileService.getPaged(search, departmentId, pageable, checkRevealSalary(request)));
     }
 
     @GetMapping("/{id}")
     public ResponseEntity<EmployeeProfileDto> getById(
-            @PathVariable Long id) {
-        return ResponseEntity.ok(employeeProfileService.getById(id));
+            @PathVariable Long id,
+            HttpServletRequest request) {
+        return ResponseEntity.ok(employeeProfileService.getById(id, checkRevealSalary(request)));
     }
 
     // get profile by user id
     @GetMapping("/user/{userId}")
     public ResponseEntity<EmployeeProfileDto> getByUserId(
-            @PathVariable Long userId) {
-        return ResponseEntity.ok(employeeProfileService.getByUserId(userId));
+            @PathVariable Long userId,
+            HttpServletRequest request) {
+        return ResponseEntity.ok(employeeProfileService.getByUserId(userId, checkRevealSalary(request)));
     }
 
     @PostMapping
@@ -111,7 +120,7 @@ public class EmployeeProfileController {
 
     /**
      * Verifies the OTP code submitted by the admin.
-     * Returns { "valid": true } or { "valid": false, "error": "..." }.
+     * Returns { "valid": true, "token": "..." } or { "valid": false, "error": "..." }.
      */
     @PostMapping("/salary-otp/verify")
     @PreAuthorize("hasAnyRole('ADMIN', 'SUPERADMIN')")
@@ -128,7 +137,8 @@ public class EmployeeProfileController {
         }
         boolean valid = salaryOtpService.verify(adminUserId, code);
         if (valid) {
-            return ResponseEntity.ok(Map.of("valid", true));
+            String token = salaryOtpService.generateRevealToken(adminUserId);
+            return ResponseEntity.ok(Map.of("valid", true, "token", token));
         } else {
             return ResponseEntity.ok(Map.of("valid", false, "error", "Invalid or expired code. Please try again."));
         }

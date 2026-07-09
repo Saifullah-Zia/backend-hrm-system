@@ -42,7 +42,13 @@ public class EmployeeProfileService {
 
     // MAPPER  Entity DTO
 
+    // MAPPER  Entity DTO
+
     private EmployeeProfileDto toDto(EmployeeProfile profile) {
+        return toDto(profile, true); // Admin creating/updating should receive the full DTO they just submitted
+    }
+
+    private EmployeeProfileDto toDto(EmployeeProfile profile, boolean revealSalary) {
         EmployeeProfileDto dto = new EmployeeProfileDto();
         dto.setId(profile.getId());
         dto.setUserId(profile.getUser() != null ? profile.getUser().getId() : null);
@@ -60,7 +66,7 @@ public class EmployeeProfileService {
         dto.setPositionId(profile.getPosition() != null ? profile.getPosition().getId() : null);
         dto.setEmploymentStatus(profile.getEmploymentStatus());
         dto.setBiometricPersonId(profile.getBiometricPersonId());
-        dto.setBasicSalary(profile.getBasicSalary());
+        dto.setBasicSalary(revealSalary ? profile.getBasicSalary() : null);
         dto.setCreatedAt(profile.getCreatedAt());
         dto.setUpdatedAt(profile.getUpdatedAt());
         dto.setCreatedBy(profile.getCreatedBy());
@@ -115,9 +121,14 @@ public class EmployeeProfileService {
     // ─────────────────────────────────────────────────────
     @Transactional(readOnly = true)
     public List<EmployeeProfileDto> getAll() {
+        return getAll(false);
+    }
+
+    @Transactional(readOnly = true)
+    public List<EmployeeProfileDto> getAll(boolean revealSalary) {
         return employeeProfileRepository.findAllWithUsers()
                 .stream()
-                .map(this::toDto)
+                .map(p -> toDto(p, revealSalary))
                 .collect(Collectors.toList());
     }
 
@@ -125,20 +136,28 @@ public class EmployeeProfileService {
     // GET BY PROFILE ID
     // ─────────────────────────────────────────────────────
     public EmployeeProfileDto getById(Long id) {
+        return getById(id, false);
+    }
+
+    public EmployeeProfileDto getById(Long id, boolean revealSalary) {
         EmployeeProfile profile = employeeProfileRepository.findById(id)
                 .orElseThrow(() -> new ResponseStatusException(
                         HttpStatus.NOT_FOUND, "Employee profile not found with ID: " + id));
-        return toDto(profile);
+        return toDto(profile, revealSalary);
     }
 
     // ─────────────────────────────────────────────────────
     // GET BY USER ID
     // ─────────────────────────────────────────────────────
     public EmployeeProfileDto getByUserId(Long userId) {
+        return getByUserId(userId, false);
+    }
+
+    public EmployeeProfileDto getByUserId(Long userId, boolean revealSalary) {
         EmployeeProfile profile = employeeProfileRepository.findByUserId(userId)
                 .orElseThrow(() -> new ResponseStatusException(
                         HttpStatus.NOT_FOUND, "Profile not found for user ID: " + userId));
-        return toDto(profile);
+        return toDto(profile, revealSalary);
     }
 
     // ─────────────────────────────────────────────────────
@@ -156,7 +175,7 @@ public class EmployeeProfileService {
                 .orElseThrow(() -> new ResponseStatusException(
                         HttpStatus.UNAUTHORIZED, "User not found"));
 
-        return getByUserId(user.getId());
+        return getByUserId(user.getId(), true); // Employees fetching their own profile can always see their own salary
     }
 
 
@@ -252,6 +271,11 @@ public class EmployeeProfileService {
 
     @Transactional(readOnly = true)
     public Page<EmployeeProfileDto> getPaged(String search, Long departmentId, Pageable pageable) {
+        return getPaged(search, departmentId, pageable, false);
+    }
+
+    @Transactional(readOnly = true)
+    public Page<EmployeeProfileDto> getPaged(String search, Long departmentId, Pageable pageable, boolean revealSalary) {
         // Convert to lowercase and add wildcards in Java
         String searchParam = (search == null || search.trim().isEmpty())
                 ? null
@@ -259,7 +283,7 @@ public class EmployeeProfileService {
 
         return employeeProfileRepository
                 .findAllPaged(searchParam, departmentId, pageable)
-                .map(this::toDto);
+                .map(p -> toDto(p, revealSalary));
     }
 
     // ─────────────────────────────────────────────────────
