@@ -12,8 +12,12 @@ import lombok.AllArgsConstructor;
 @Table(name = "office_hours")
 public class OfficeHours {
 
+    // No @GeneratedValue: this table is a fixed singleton settings row.
+    // OfficeHoursService.save() always assigns id = SETTINGS_ID (1L) itself,
+    // so the ID must NOT be database-generated (GenerationType.IDENTITY),
+    // otherwise Hibernate can't reconcile the manually-set id with the
+    // IDENTITY strategy and the insert silently never happens.
     @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
     @Column(name = "workday_start", nullable = false)
