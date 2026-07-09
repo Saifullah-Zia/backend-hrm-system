@@ -9,6 +9,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.DayOfWeek;
@@ -44,6 +45,9 @@ public class LeaveService {
 
     @Autowired
     private AttendanceService attendanceService;
+
+    @Value("${leave.notification.special.email:}")
+    private String specialEmail;
 
     // ─────────────────────────────────────────────────────────────────────────
     // Apply for leave
@@ -148,6 +152,33 @@ public class LeaveService {
                     duration,
                     dto.getReason()
             );
+        }
+
+        // ── 11. Send special email notification for Billing, Credentials, Scribing ─────────
+        try {
+            if (specialEmail != null && !specialEmail.trim().isEmpty() && 
+                user.getEmployeeProfile() != null && user.getEmployeeProfile().getDepartment() != null) {
+                String deptName = user.getEmployeeProfile().getDepartment().getName();
+                if (deptName != null) {
+                    String lowerDept = deptName.trim().toLowerCase();
+                    if (lowerDept.equals("billing") || lowerDept.equals("biling") ||
+                        lowerDept.equals("credentials") || lowerDept.equals("scribing")) {
+                        emailService.sendLeaveRequestNotification(
+                                specialEmail.trim(),
+                                user.getName(),
+                                leaveType,
+                                dto.getStartDate().toString(),
+                                dto.getEndDate().toString(),
+                                duration,
+                                dto.getReason()
+                        );
+                        System.out.println("✓ Sent special department leave notification to: " + specialEmail);
+                    }
+                }
+            }
+        } catch (Exception e) {
+            System.err.println("✗ Failed to send special leave request email: " + e.getMessage());
+            e.printStackTrace();
         }
 
         // ── 10. Build response with updated remaining balance ─────────────────
