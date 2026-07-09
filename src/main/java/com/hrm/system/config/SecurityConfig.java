@@ -74,6 +74,7 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET, "/api/employee-profiles/me").hasAnyRole("EMPLOYEE", "ADMIN", "SUPERADMIN")
                         .requestMatchers(HttpMethod.GET, "/api/employee-profiles/user/**").hasAnyRole("EMPLOYEE", "ADMIN", "SUPERADMIN")
                         .requestMatchers(HttpMethod.GET, "/api/employee-profiles/**").hasAnyRole("ADMIN", "SUPERADMIN", "EMPLOYEE")
+                        .requestMatchers(HttpMethod.POST, "/api/employee-profiles/salary-otp/request", "/api/employee-profiles/salary-otp/verify").hasAnyRole("ADMIN", "SUPERADMIN")
                         .requestMatchers(HttpMethod.POST, "/api/employee-profiles", "/api/employee-profiles/**").hasAnyRole("ADMIN", "SUPERADMIN")
                         .requestMatchers(HttpMethod.PUT, "/api/employee-profiles/**").hasAnyRole("ADMIN", "SUPERADMIN")
                         .requestMatchers(HttpMethod.DELETE, "/api/employee-profiles/**").hasAnyRole("ADMIN", "SUPERADMIN")

@@ -398,6 +398,72 @@ public class EmailService {
         }
     }
 
+    // Send Salary Reveal OTP to Admin
+    public void sendSalaryOtpEmail(String toEmail, String adminName, int code) {
+        String htmlContent = """
+            <!DOCTYPE html>
+            <html>
+            <head><style>
+                body { font-family: Arial, sans-serif; margin: 0; padding: 0; background: #f3f4f6; }
+                .container { max-width: 560px; margin: 40px auto; background: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 24px rgba(0,0,0,0.08); }
+                .header { background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%); color: white; padding: 32px 24px; text-align: center; }
+                .header h2 { margin: 0; font-size: 22px; font-weight: 700; letter-spacing: 0.5px; }
+                .header p { margin: 6px 0 0; font-size: 13px; color: rgba(255,255,255,0.7); }
+                .content { padding: 32px 24px; }
+                .otp-box { background: linear-gradient(135deg, #FC0175 0%, #a8005e 100%); border-radius: 12px; padding: 24px; text-align: center; margin: 20px 0; }
+                .otp-code { font-size: 42px; font-weight: 900; color: #ffffff; letter-spacing: 10px; font-family: 'Courier New', monospace; }
+                .otp-label { font-size: 12px; color: rgba(255,255,255,0.8); margin-top: 6px; text-transform: uppercase; letter-spacing: 1.5px; }
+                .info { background: #fff8f0; border: 1px solid #fde68a; border-radius: 8px; padding: 14px 16px; font-size: 13px; color: #92400e; margin-top: 18px; }
+                .footer { text-align: center; padding: 20px; font-size: 11px; color: #9ca3af; background: #f9fafb; border-top: 1px solid #f3f4f6; }
+            </style></head>
+            <body>
+                <div class="container">
+                    <div class="header">
+                        <h2>🔐 Salary Reveal Verification</h2>
+                        <p>JCAT Solutions HRM System</p>
+                    </div>
+                    <div class="content">
+                        <p>Hello <strong>%s</strong>,</p>
+                        <p>You requested to reveal an employee's salary. Use the verification code below to confirm your identity:</p>
+                        <div class="otp-box">
+                            <div class="otp-code">%06d</div>
+                            <div class="otp-label">Verification Code</div>
+                        </div>
+                        <div class="info">
+                            ⏱️ This code expires in <strong>5 minutes</strong>. Do not share this code with anyone.
+                        </div>
+                        <p style="margin-top:20px; color: #6b7280; font-size: 13px;">If you did not request this, please ignore this email. No salary data has been revealed.</p>
+                        <p>Regards,<br><strong>JCAT Solutions HRM</strong></p>
+                    </div>
+                    <div class="footer">© 2026 JCAT Solutions HRM. All rights reserved.</div>
+                </div>
+            </body>
+            </html>
+        """.formatted(adminName, code);
+
+        String apiKey = System.getenv("RESEND_API_KEY");
+        if (apiKey != null && !apiKey.trim().isEmpty()) {
+            sendViaResend(toEmail, "🔐 Salary Reveal Code - " + String.format("%06d", code), htmlContent, true);
+            return;
+        }
+
+        // Fallback to SMTP
+        try {
+            MimeMessage message = mailSender.createMimeMessage();
+            MimeMessageHelper helper = new MimeMessageHelper(message, true, "UTF-8");
+            helper.setFrom(fromEmail);
+            helper.setTo(toEmail);
+            helper.setSubject("🔐 Salary Reveal Code - " + String.format("%06d", code));
+            helper.setText(htmlContent, true);
+            mailSender.send(message);
+            System.out.println("✓ Salary OTP email sent to: " + toEmail);
+        } catch (Exception e) {
+            System.err.println("✗ Failed to send salary OTP email to: " + toEmail);
+            e.printStackTrace();
+            throw new RuntimeException("Email sending failed: " + e.getMessage(), e);
+        }
+    }
+
     // Helper method to send email via Resend API
     private void sendViaResend(String toEmail, String subject, String content, boolean isHtml) {
         try {
