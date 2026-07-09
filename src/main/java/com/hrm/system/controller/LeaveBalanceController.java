@@ -11,7 +11,6 @@ import org.springframework.web.bind.annotation.*;
 
 @RestController
 @RequestMapping("/api/leave/balance")
-@CrossOrigin(origins = "http://localhost:3000", allowCredentials = "true")
 public class LeaveBalanceController {
 
     @Autowired

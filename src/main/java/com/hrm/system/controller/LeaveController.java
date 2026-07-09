@@ -18,7 +18,6 @@ import java.util.List;
 
 @RestController
 @RequestMapping("/api/leave")
-@CrossOrigin(origins = "http://localhost:3000", allowCredentials = "true")
 public class LeaveController {
 
     @Autowired
