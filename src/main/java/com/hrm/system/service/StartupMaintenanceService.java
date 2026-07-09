@@ -22,6 +22,9 @@ public class StartupMaintenanceService {
     private UserRepository userRepository;
 
     @Autowired
+    private org.springframework.jdbc.core.JdbcTemplate jdbcTemplate;
+
+    @Autowired
     private LeaveBalanceService leaveBalanceService;
 
     @Autowired
@@ -36,6 +39,18 @@ public class StartupMaintenanceService {
     @Async("startupTaskExecutor")
     @Transactional
     public void runDeferredStartupMaintenance() {
+        try {
+            System.out.println("🔧 Running database schema cleanup for legacy payroll columns...");
+            jdbcTemplate.execute("ALTER TABLE payroll DROP COLUMN IF EXISTS month");
+            jdbcTemplate.execute("ALTER TABLE payroll DROP COLUMN IF EXISTS year");
+            jdbcTemplate.execute("ALTER TABLE payroll DROP COLUMN IF EXISTS salary");
+            jdbcTemplate.execute("ALTER TABLE payroll DROP COLUMN IF EXISTS deduction");
+            jdbcTemplate.execute("ALTER TABLE payroll DROP COLUMN IF EXISTS bonuses");
+            System.out.println("✅ Legacy database columns cleanup finished successfully.");
+        } catch (Exception e) {
+            System.err.println("⚠️ Legacy database column cleanup failed: " + e.getMessage());
+        }
+
         try {
             int year = LocalDate.now().getYear();
             List<User> allUsers = userRepository.findAll();
