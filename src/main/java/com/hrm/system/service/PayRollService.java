@@ -45,6 +45,9 @@ public class PayRollService {
     @Autowired
     private PayrollCalculationService payrollCalculationService;
 
+    @Autowired
+    private AttendanceService attendanceService;
+
     // ─── New payroll generation with attendance integration ───────────────────
 
     @Transactional
@@ -66,7 +69,11 @@ public class PayRollService {
 
         AttendanceSummary attendanceSummary = attendanceSummaryRepository
                 .findByEmployeeIdAndPayrollPeriodId(employeeId, payrollPeriodId)
-                .orElseThrow(() -> new RuntimeException("Attendance summary not found for this employee and period"));
+                .orElseGet(() -> {
+                    attendanceService.generateAttendanceSummary(employeeId, payrollPeriodId);
+                    return attendanceSummaryRepository.findByEmployeeIdAndPayrollPeriodId(employeeId, payrollPeriodId)
+                            .orElseThrow(() -> new RuntimeException("Failed to generate attendance summary for employee: " + employeeId));
+                });
 
         double basicSalary = employee.getBasicSalary() != null ? employee.getBasicSalary() : 0.0;
         int workingDays = attendanceSummary.getWorkingDays() != null ? attendanceSummary.getWorkingDays() : 26;
@@ -128,6 +135,9 @@ public class PayRollService {
         if (!payrollPeriod.getLocked()) {
             throw new RuntimeException("Payroll period must be locked before generating payroll");
         }
+
+        // Generate attendance summaries for all active employees first
+        attendanceService.generateBulkAttendanceSummaries(payrollPeriodId);
 
         List<AttendanceSummary> summaries = attendanceSummaryRepository.findAll().stream()
                 .filter(s -> s.getPayrollPeriod().getId().equals(payrollPeriodId))
@@ -451,6 +461,28 @@ public class PayRollService {
         dto.setDeductions(payroll.getTotalDeductions());
         dto.setNetSalary(payroll.getNetSalary());
         dto.setStatus(payroll.getStatus() != null ? payroll.getStatus().name() : null);
+        if (payroll.getPayrollPeriod() != null) {
+            dto.setMonth(payroll.getPayrollPeriod().getMonth() + " " + payroll.getPayrollPeriod().getYear());
+        }
+
+        // Map breakdown fields
+        dto.setBasicSalary(payroll.getBasicSalary());
+        dto.setDailySalary(payroll.getDailySalary());
+        dto.setWorkingDays(payroll.getWorkingDays());
+        dto.setPresentDays(payroll.getPresentDays());
+        dto.setLateDays(payroll.getLateDays());
+        dto.setPaidLeaveDays(payroll.getPaidLeaveDays());
+        dto.setUnpaidLeaveDays(payroll.getUnpaidLeaveDays());
+        dto.setAbsentDays(payroll.getAbsentDays());
+        dto.setTotalAllowances(payroll.getTotalAllowances());
+        dto.setTotalBonuses(payroll.getTotalBonuses());
+        dto.setTotalDeductions(payroll.getTotalDeductions());
+        dto.setGrossSalary(payroll.getGrossSalary());
+        dto.setGeneratedBy(payroll.getGeneratedBy());
+        dto.setGeneratedAt(payroll.getGeneratedAt());
+        dto.setApprovedBy(payroll.getApprovedBy());
+        dto.setApprovedAt(payroll.getApprovedAt());
+        dto.setPaidAt(payroll.getPaidAt());
         return dto;
     }
 }
