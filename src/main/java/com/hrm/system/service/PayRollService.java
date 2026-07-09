@@ -48,6 +48,9 @@ public class PayRollService {
     @Autowired
     private AttendanceService attendanceService;
 
+    @Autowired
+    private PayrollGenerationHelper payrollGenerationHelper;
+
     // ─── New payroll generation with attendance integration ───────────────────
 
     @Transactional
@@ -127,7 +130,9 @@ public class PayRollService {
         return mapToDto(saved);
     }
 
-    @Transactional
+    // NOTE: intentionally NOT @Transactional — each employee runs in its own
+    // independent REQUIRES_NEW transaction inside payrollGenerationHelper.
+    // This prevents a single failure from marking the whole batch as rollback-only.
     public void generateBulkPayroll(Long payrollPeriodId, Long generatedBy) {
         PayrollPeriod payrollPeriod = payrollPeriodRepository.findById(payrollPeriodId)
                 .orElseThrow(() -> new RuntimeException("Payroll period not found"));
@@ -136,25 +141,34 @@ public class PayRollService {
             throw new RuntimeException("Payroll period must be locked before generating payroll");
         }
 
-        // Generate attendance summaries for all active employees first
+        // Step 1: Generate attendance summaries for all active employees first
         attendanceService.generateBulkAttendanceSummaries(payrollPeriodId);
 
+        // Step 2: Get the summaries for this period
         List<AttendanceSummary> summaries = attendanceSummaryRepository.findAll().stream()
                 .filter(s -> s.getPayrollPeriod().getId().equals(payrollPeriodId))
                 .collect(Collectors.toList());
 
+        int generated = 0;
+        int skipped   = 0;
+        int failed    = 0;
+
+        // Step 3: Process each employee in its own independent transaction
         for (AttendanceSummary summary : summaries) {
             try {
-                // Skip if payroll record already exists to prevent physical transaction rollback-only state
-                if (payrollRepository.findByUserAndPayrollPeriod(summary.getEmployee(), payrollPeriod).isPresent()) {
-                    continue;
-                }
-                generatePayroll(payrollPeriodId, summary.getEmployee().getId(), generatedBy);
+                boolean created = payrollGenerationHelper.generatePayrollForEmployee(
+                        payrollPeriodId, summary.getEmployee().getId(), generatedBy);
+                if (created) generated++; else skipped++;
             } catch (Exception e) {
-                System.err.println("Failed to generate payroll for employee: " + summary.getEmployee().getId());
+                failed++;
+                System.err.println("✗ Failed to generate payroll for employee "
+                        + summary.getEmployee().getId() + ": " + e.getMessage());
                 e.printStackTrace();
             }
         }
+
+        System.out.printf("Bulk payroll complete: %d generated, %d skipped, %d failed%n",
+                generated, skipped, failed);
     }
 
     @Transactional
