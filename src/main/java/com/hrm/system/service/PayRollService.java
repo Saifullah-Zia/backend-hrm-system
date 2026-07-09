@@ -145,6 +145,10 @@ public class PayRollService {
 
         for (AttendanceSummary summary : summaries) {
             try {
+                // Skip if payroll record already exists to prevent physical transaction rollback-only state
+                if (payrollRepository.findByUserAndPayrollPeriod(summary.getEmployee(), payrollPeriod).isPresent()) {
+                    continue;
+                }
                 generatePayroll(payrollPeriodId, summary.getEmployee().getId(), generatedBy);
             } catch (Exception e) {
                 System.err.println("Failed to generate payroll for employee: " + summary.getEmployee().getId());

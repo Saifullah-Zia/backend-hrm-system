@@ -125,7 +125,7 @@ public class PayrollController {
     }
 
     @DeleteMapping("/{id}")
-    @PreAuthorize("hasRole('SUPERADMIN')")
+    @PreAuthorize("hasRole('SUPERADMIN') or hasRole('ADMIN')")
     public ResponseEntity<String> deletePayroll(@PathVariable Long id) {
         payRollService.deletePayroll(id);
         return ResponseEntity.ok("Payroll record Deleted successfully");

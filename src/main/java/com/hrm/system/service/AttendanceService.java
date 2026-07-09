@@ -282,7 +282,11 @@ public class AttendanceService {
         Integer year = payrollPeriod.getYear();
 
         // Get first and last day of the month
-        YearMonth yearMonth = YearMonth.of(year, Month.valueOf(month.toUpperCase()));
+        String monthStr = month;
+        if (monthStr != null && monthStr.contains(" ")) {
+            monthStr = monthStr.split(" ")[0];
+        }
+        YearMonth yearMonth = YearMonth.of(year, Month.valueOf(monthStr != null ? monthStr.trim().toUpperCase() : ""));
         LocalDate startDate = yearMonth.atDay(1);
         LocalDate endDate = yearMonth.atEndOfMonth();
 
@@ -336,8 +340,10 @@ public class AttendanceService {
         PayrollPeriod payrollPeriod = payrollPeriodRepository.findById(payrollPeriodId)
                 .orElseThrow(() -> new EntityNotFoundException("Payroll period not found: " + payrollPeriodId));
 
-        // Get all employees
-        List<User> employees = userRepository.findAll();
+        // Get all employees (Role.EMPLOYEE only)
+        List<User> employees = userRepository.findAll().stream()
+                .filter(u -> u.getRole() != null && u.getRole() == Role.EMPLOYEE)
+                .collect(Collectors.toList());
 
         for (User employee : employees) {
             try {
