@@ -129,4 +129,16 @@ public class AttendanceController {
             return ResponseEntity.status(HttpStatus.NOT_FOUND).body(e.getMessage());
         }
     }
+
+    /**
+     * Admin only — manually trigger absence marking for yesterday's shift date.
+     * Useful for testing without waiting for the 2:30 AM scheduled job.
+     * POST /api/attendance/mark-absent-yesterday
+     */
+    @PostMapping("/mark-absent-yesterday")
+    @PreAuthorize("hasAnyRole('ADMIN', 'SUPERADMIN')")
+    public ResponseEntity<String> triggerMarkAbsent() {
+        attendanceService.markAllAbsentForYesterday();
+        return ResponseEntity.ok("Absent marking completed for yesterday's shift date");
+    }
 }
