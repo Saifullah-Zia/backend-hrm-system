@@ -1,6 +1,7 @@
 package com.hrm.system.controller;
 
 import com.hrm.system.dto.AttendanceDto;
+import com.hrm.system.dto.ManualAttendanceRequestDto;
 import com.hrm.system.service.AttendanceService;
 import jakarta.persistence.EntityNotFoundException;
 import org.springframework.http.HttpStatus;
@@ -140,5 +141,16 @@ public class AttendanceController {
     public ResponseEntity<String> triggerMarkAbsent() {
         attendanceService.markAllAbsentForYesterday();
         return ResponseEntity.ok("Absent marking completed for yesterday's shift date");
+    }
+
+    @PostMapping("/mark-manual")
+    @PreAuthorize("hasAnyRole('ADMIN', 'SUPERADMIN')")
+    public ResponseEntity<?> markManualAttendance(@RequestBody ManualAttendanceRequestDto request) {
+        try {
+            return ResponseEntity.ok(attendanceService.markAttendanceForDateRange(
+                    request.getStartDate(), request.getEndDate(), request.getUserIds()));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(e.getMessage());
+        }
     }
 }

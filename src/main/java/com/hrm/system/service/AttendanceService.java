@@ -3,11 +3,9 @@ package com.hrm.system.service;
 import com.hrm.system.config.AppTimeZone;
 import com.hrm.system.dto.AttendanceDto;
 import com.hrm.system.dto.AttendanceSummaryDto;
+import com.hrm.system.dto.ManualAttendanceResultDto;
 import com.hrm.system.model.*;
-import com.hrm.system.repository.AttendanceRepository;
-import com.hrm.system.repository.AttendanceSummaryRepository;
-import com.hrm.system.repository.PayrollPeriodRepository;
-import com.hrm.system.repository.UserRepository;
+import com.hrm.system.repository.*;
 import jakarta.persistence.EntityNotFoundException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -21,6 +19,7 @@ import com.hrm.system.service.OfficeHoursService;
 
 import java.time.*;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.stream.Collectors;
 
@@ -422,5 +421,102 @@ public class AttendanceService {
                 e.printStackTrace();
             }
         }
+    }
+
+    @Transactional
+    public ManualAttendanceResultDto markAttendanceForDateRange(LocalDate startDate, LocalDate endDate, List<Long> userIds) {
+        if (startDate == null || endDate == null) {
+            throw new IllegalArgumentException("startDate and endDate are required");
+        }
+        if (endDate.isBefore(startDate)) {
+            throw new IllegalArgumentException("endDate cannot be before startDate");
+        }
+
+        List<User> targetUsers = (userIds != null && !userIds.isEmpty())
+                ? userRepository.findAllById(userIds).stream()
+                .filter(u -> u.getRole() != Role.ADMIN && u.getRole() != Role.SUPERADMIN)
+                .collect(Collectors.toList())
+                : userRepository.findAll().stream()
+                .filter(u -> u.getRole() != Role.ADMIN && u.getRole() != Role.SUPERADMIN)
+                .collect(Collectors.toList());
+
+        if (targetUsers.isEmpty()) {
+            return new ManualAttendanceResultDto(0, 0, 0, 0);
+        }
+
+        List<Long> resolvedUserIds = targetUsers.stream().map(User::getId).collect(Collectors.toList());
+
+        // Bulk-fetch once — avoids N queries per employee per day
+        List<Attendance> existingRecords = attendanceRepository
+                .findByUserIdInAndDateBetween(resolvedUserIds, startDate, endDate);
+        Map<String, Attendance> existingByKey = existingRecords.stream()
+                .collect(Collectors.toMap(a -> a.getUser().getId() + "_" + a.getDate(), a -> a));
+
+        List<Leave> approvedLeaves = LeaveRepository.findByStatusAndDateRangeOverlapAndUserIdIn(
+                LeaveStatus.APPROVED, startDate, endDate, resolvedUserIds);
+
+        int created = 0, updatedToLeave = 0, skippedHandled = 0, skippedWeekend = 0;
+
+        for (User user : targetUsers) {
+            LocalDate date = startDate;
+            while (!date.isAfter(endDate)) {
+                DayOfWeek dow = date.getDayOfWeek();
+                if (dow == DayOfWeek.SATURDAY || dow == DayOfWeek.SUNDAY) {
+                    skippedWeekend++;
+                    date = date.plusDays(1);
+                    continue;
+                }
+
+                Attendance existing = existingByKey.get(user.getId() + "_" + date);
+
+                // Rule 1: real check-in always wins — never touch it
+                if (existing != null && existing.getCheckIn() != null) {
+                    skippedHandled++;
+                    date = date.plusDays(1);
+                    continue;
+                }
+
+                LocalDate finalDate = date;
+                Optional<Leave> matchingLeave = approvedLeaves.stream()
+                        .filter(l -> l.getUser().getId().equals(user.getId())
+                                && !finalDate.isBefore(l.getStartDate())
+                                && !finalDate.isAfter(l.getEndDate()))
+                        .findFirst();
+
+                if (matchingLeave.isPresent()) {
+                    String status = matchingLeave.get().getType().equalsIgnoreCase("UNPAID")
+                            ? "UNPAID_LEAVE" : "ON_LEAVE";
+                    if (existing == null) {
+                        Attendance a = new Attendance();
+                        a.setUser(user);
+                        a.setDate(date);
+                        a.setStatus(status);
+                        attendanceRepository.save(a);
+                        created++;
+                    } else if (!status.equals(existing.getStatus())) {
+                        existing.setStatus(status);
+                        attendanceRepository.save(existing);
+                        updatedToLeave++;
+                    } else {
+                        skippedHandled++;
+                    }
+                } else {
+                    if (existing == null) {
+                        Attendance a = new Attendance();
+                        a.setUser(user);
+                        a.setDate(date);
+                        a.setStatus("ABSENT");
+                        attendanceRepository.save(a);
+                        created++;
+                    } else {
+                        skippedHandled++; // already ABSENT, no leave — no-op
+                    }
+                }
+
+                date = date.plusDays(1);
+            }
+        }
+
+        return new ManualAttendanceResultDto(created, updatedToLeave, skippedHandled, skippedWeekend);
     }
 }
