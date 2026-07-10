@@ -7,7 +7,7 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
-@RequestMapping("/api/office-hours")
+@RequestMapping("/api/settings/office-hours")
 public class OfficeHoursController {
 
     private final OfficeHoursService officeHoursService;
