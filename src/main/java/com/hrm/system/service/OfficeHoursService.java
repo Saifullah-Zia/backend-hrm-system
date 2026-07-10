@@ -38,6 +38,14 @@ import java.time.format.DateTimeFormatter;
 
         @Transactional
         public OfficeHoursDto save(OfficeHoursDto dto) {
+            // Validate shift times
+            LocalTime start = LocalTime.parse(dto.getWorkdayStart());
+            LocalTime end = LocalTime.parse(dto.getWorkdayEnd());
+            
+            if (dto.getGraceMinutes() < 0 || dto.getGraceMinutes() > 60) {
+                throw new IllegalArgumentException("Grace minutes must be between 0 and 60");
+            }
+
             OfficeHours entity = officeHoursRepository.findById(SETTINGS_ID)
                     .orElse(new OfficeHours());
 
