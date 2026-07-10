@@ -143,6 +143,18 @@ public class HikvisionWebhookController {
                     attendanceService.checkIn(userId);
                     return ResponseEntity.ok("Check-in recorded for employee ID: " + employeeId);
                 } catch (IllegalStateException e) {
+                    // If check-in fails due to pending check-out from previous day, check out first then check in
+                    if (e.getMessage().contains("Please check out from your previous shift first")) {
+                        System.out.println("Pending check-out from previous day, checking out first then checking in");
+                        try {
+                            attendanceService.checkOut(userId);
+                            attendanceService.checkIn(userId);
+                            return ResponseEntity.ok("Check-out then check-in recorded for employee ID: " + employeeId);
+                        } catch (IllegalStateException e2) {
+                            System.out.println("Ignoring duplicate scan after auto check-out: " + e2.getMessage());
+                            return ResponseEntity.ok("Ignored: employee already checked in today");
+                        }
+                    }
                     System.out.println("Ignoring duplicate scan: " + e.getMessage());
                     return ResponseEntity.ok("Ignored: employee already checked in today");
                 }
