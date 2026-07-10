@@ -104,6 +104,10 @@ public class SecurityConfig {
                         // Payslip endpoints
                         .requestMatchers(HttpMethod.POST, "/api/payslips/generate").hasAnyRole("ADMIN", "SUPERADMIN")
                         .requestMatchers(HttpMethod.GET, "/api/payslips/*", "/api/payslips/download/*").hasAnyRole("EMPLOYEE", "ADMIN", "SUPERADMIN")
+                        .requestMatchers(HttpMethod.GET, "/api/holidays").hasAnyRole("EMPLOYEE", "ADMIN", "SUPERADMIN")
+                        .requestMatchers(HttpMethod.POST, "/api/holidays", "/api/holidays/*").hasAnyRole("ADMIN", "SUPERADMIN")
+                        .requestMatchers(HttpMethod.PUT, "/api/holidays/*").hasAnyRole("ADMIN", "SUPERADMIN")
+                        .requestMatchers(HttpMethod.DELETE, "/api/holidays/*").hasAnyRole("ADMIN", "SUPERADMIN")
                         .anyRequest().authenticated()
                 )
                 .addFilterBefore(jwtFilter, UsernamePasswordAuthenticationFilter.class);
