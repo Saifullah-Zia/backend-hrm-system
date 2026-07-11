@@ -2,8 +2,11 @@ package com.hrm.system.controller;
 
 import com.hrm.system.dto.AttendanceDto;
 import com.hrm.system.dto.ManualAttendanceRequestDto;
+import com.hrm.system.model.User;
+import com.hrm.system.repository.UserRepository;
 import com.hrm.system.service.AttendanceService;
 import jakarta.persistence.EntityNotFoundException;
+import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -17,9 +20,11 @@ import java.util.List;
 public class AttendanceController {
 
     private final AttendanceService attendanceService;
+    private final UserRepository userRepository;
 
-    public AttendanceController(AttendanceService attendanceService) {
+    public AttendanceController(AttendanceService attendanceService, UserRepository userRepository) {
         this.attendanceService = attendanceService;
+        this.userRepository = userRepository;
     }
 
     @PostMapping
@@ -103,8 +108,21 @@ public class AttendanceController {
             @RequestParam(defaultValue = "0")    int page,
             @RequestParam(defaultValue = "10")   int size,
             @RequestParam(defaultValue = "date") String sortBy,
-            @RequestParam(defaultValue = "desc") String sortDir) {
+            @RequestParam(defaultValue = "desc") String sortDir,
+            Authentication auth,
+            HttpServletRequest request) {
         try {
+            boolean isAdmin = auth.getAuthorities().stream()
+                    .anyMatch(a -> a.getAuthority().equals("ROLE_ADMIN") || a.getAuthority().equals("ROLE_SUPERADMIN"));
+
+            if (!isAdmin) {
+                Object requestUserId = request.getAttribute("userId");
+                if (requestUserId == null || !requestUserId.equals(userId)) {
+                    return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                            .body("You can only view your own attendance");
+                }
+            }
+
             return ResponseEntity.ok(attendanceService.getUserPaginated(userId, page, size, sortBy, sortDir));
         } catch (EntityNotFoundException e) {
             return ResponseEntity.status(HttpStatus.NOT_FOUND).body(e.getMessage());

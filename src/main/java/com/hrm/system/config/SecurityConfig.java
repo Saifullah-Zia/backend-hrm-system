@@ -86,7 +86,8 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET, "/api/documents/files/**").authenticated()
                         .requestMatchers(HttpMethod.GET, "/api/notices/user/**").hasAnyRole("EMPLOYEE", "ADMIN", "SUPERADMIN")
                         .requestMatchers("/api/notices/**").hasAnyRole("ADMIN", "SUPERADMIN")
-                        .requestMatchers("/api/attendance/checkin", "/api/attendance/checkout").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/attendance/user/*/paged").hasAnyRole("EMPLOYEE", "ADMIN", "SUPERADMIN")
+                        .requestMatchers(HttpMethod.POST, "/api/attendance/checkin", "/api/attendance/checkout").permitAll()
                         .requestMatchers("/api/attendance/**").hasAnyRole("ADMIN", "SUPERADMIN")
                         // Payroll endpoints
                         .requestMatchers(HttpMethod.POST, "/api/payroll/generate", "/api/payroll/generate/bulk").hasAnyRole("ADMIN", "SUPERADMIN")
