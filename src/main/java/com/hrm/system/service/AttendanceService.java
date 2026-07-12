@@ -526,6 +526,16 @@ public class AttendanceService {
         // for a shift that started yesterday evening is still yesterday's date.
         LocalDate shiftDate = LocalDate.now(AppTimeZone.PKT).minusDays(1);
 
+        // FIX: Skip weekends entirely — no shift is expected on Saturday/Sunday,
+        // so nobody should be marked ABSENT for those dates. This check was
+        // previously missing here (it only existed in markAttendanceForDateRange),
+        // which caused every employee to be wrongly marked ABSENT on weekends.
+        DayOfWeek dayOfWeek = shiftDate.getDayOfWeek();
+        if (dayOfWeek == DayOfWeek.SATURDAY || dayOfWeek == DayOfWeek.SUNDAY) {
+            System.out.println("Skipping absence marking for " + shiftDate + " (" + dayOfWeek + ") — weekend, no shift expected.");
+            return;
+        }
+
         // Exclude ADMIN/SUPERADMIN — they are not tracked for daily attendance.
         List<User> allUsers = userRepository.findAll().stream()
                 .filter(u -> u.getRole() != Role.ADMIN && u.getRole() != Role.SUPERADMIN)
