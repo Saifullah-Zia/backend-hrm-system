@@ -108,4 +108,17 @@ public class UserController {
         return ResponseEntity.ok(probationService.confirmProbation(userId, confirmedByAdminId));
     }
 
+    // ─── Toggle web check-in access per employee ──────────────────────────
+    @PatchMapping("/{id}/web-checkin-access")
+    @PreAuthorize("hasRole('SUPERADMIN') or hasRole('ADMIN')")
+    public ResponseEntity<UserDTO> setWebCheckInAccess(
+            @PathVariable Long id,
+            @RequestBody java.util.Map<String, Boolean> body) {
+        Boolean allowed = body.get("allowed");
+        if (allowed == null) {
+            return ResponseEntity.badRequest().build();
+        }
+        return ResponseEntity.ok(userService.updateWebCheckInAccess(id, allowed));
+    }
+
 }

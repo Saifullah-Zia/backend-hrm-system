@@ -95,6 +95,10 @@ public class AttendanceService {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new EntityNotFoundException("User not found: " + userId));
 
+        if (!user.isWebCheckInAllowed()) {
+            throw new IllegalStateException("Web check-in is not enabled for your account. Please use the biometric device.");
+        }
+
         // Current time in PKT — employee cannot manipulate this
         ZonedDateTime nowPKT  = ZonedDateTime.now(AppTimeZone.PKT);
         LocalDate     todayPKT = nowPKT.toLocalDate();
@@ -129,6 +133,10 @@ public class AttendanceService {
                 .orElseThrow(() -> new EntityNotFoundException(
                         "No pending check-in found. Please check in first."));
         System.out.println("Found attendance record for user ID: " + userId + ", check-in time: " + attendance.getCheckIn() + ", date: " + attendance.getDate());
+
+        if (!attendance.getUser().isWebCheckInAllowed()) {
+            throw new IllegalStateException("Web check-out is not enabled for your account. Please use the biometric device.");
+        }
 
         if (attendance.getCheckOut() != null) {
             System.out.println("User ID: " + userId + " already checked out at: " + attendance.getCheckOut());

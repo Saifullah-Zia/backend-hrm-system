@@ -22,4 +22,7 @@ public class UserDTO {
     private LocalDate probationStartDate;
     private LocalDate probationEndDate;
     private ProbationStatus probationStatus;
+
+    // attendance access
+    private boolean webCheckInAllowed;
 }

@@ -126,6 +126,12 @@ public class User {
     @Column(columnDefinition = "boolean default false")
     private Boolean probationNotificationSent = false;
 
+    // ─── Attendance access control ────────────────────────────────────────
+    /** When false, the employee must use the biometric device to check in/out.
+     *  Admin can enable this per-employee from the dashboard. */
+    @Column(name = "web_check_in_allowed", columnDefinition = "boolean default false")
+    private boolean webCheckInAllowed = false;
+
     // Audit fields
     @CreatedDate
     @Column(updatable = false)

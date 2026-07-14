@@ -134,8 +134,17 @@ public class UserService implements UserDetailsService {
                 user.getRole(),
                 user.getProbationStartDate(),
                 user.getProbationEndDate(),
-                user.getProbationStatus()
+                user.getProbationStatus(),
+                user.isWebCheckInAllowed()
         );
+    }
+
+    /** Admin-only: enable or disable web-based check-in for a specific employee. */
+    public UserDTO updateWebCheckInAccess(Long userId, boolean allowed) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new RuntimeException("User not found with ID " + userId));
+        user.setWebCheckInAllowed(allowed);
+        return convertToDTO(userRepository.save(user));
     }
 
     @Override
