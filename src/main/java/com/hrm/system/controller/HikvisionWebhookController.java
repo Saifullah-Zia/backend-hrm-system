@@ -127,9 +127,12 @@ public class HikvisionWebhookController {
             System.out.println("Already checked in today: " + alreadyCheckedIn);
 
             if (alreadyCheckedIn) {
-                // Check out
+                // Check out — use the biometric-safe path, which does NOT enforce
+                // webCheckInAllowed. Biometric employees have that flag set to
+                // false, so calling the web checkOut() here would throw and the
+                // checkout would silently never be persisted.
                 try {
-                    attendanceService.checkOut(userId);
+                    attendanceService.biometricCheckOut(userId);
                     return ResponseEntity.ok("Check-out recorded for employee ID: " + employeeId);
                 } catch (IllegalStateException e) {
                     // Already checked out earlier today (e.g. 3rd+ scan of the day) - not an error,
@@ -138,17 +141,17 @@ public class HikvisionWebhookController {
                     return ResponseEntity.ok("Ignored: employee already checked out today");
                 }
             } else {
-                // Check in
+                // Check in — use the biometric-safe path for the same reason as above.
                 try {
-                    attendanceService.checkIn(userId);
+                    attendanceService.biometricCheckIn(userId);
                     return ResponseEntity.ok("Check-in recorded for employee ID: " + employeeId);
                 } catch (IllegalStateException e) {
                     // If check-in fails due to pending check-out from previous day, check out first then check in
                     if (e.getMessage().contains("Please check out from your previous shift first")) {
                         System.out.println("Pending check-out from previous day, checking out first then checking in");
                         try {
-                            attendanceService.checkOut(userId);
-                            attendanceService.checkIn(userId);
+                            attendanceService.biometricCheckOut(userId);
+                            attendanceService.biometricCheckIn(userId);
                             return ResponseEntity.ok("Check-out then check-in recorded for employee ID: " + employeeId);
                         } catch (IllegalStateException e2) {
                             System.out.println("Ignoring duplicate scan after auto check-out: " + e2.getMessage());

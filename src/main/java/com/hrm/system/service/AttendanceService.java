@@ -148,7 +148,61 @@ public class AttendanceService {
         return mapToDto(attendanceRepository.save(attendance));
     }
 
-    // ── Admin: full record edit ───────────────────────────────────────────────
+    // ── Biometric device: check-in (no web-access guard) ─────────────────────
+    // Called exclusively by the Hikvision webhook. Biometric employees have
+    // webCheckInAllowed = false, so the regular checkIn() would throw. This
+    // method stamps the current PKT time without consulting that flag.
+
+    @Transactional
+    public AttendanceDto biometricCheckIn(Long userId) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new EntityNotFoundException("User not found: " + userId));
+
+        ZonedDateTime nowPKT   = ZonedDateTime.now(AppTimeZone.PKT);
+        LocalDate     todayPKT = nowPKT.toLocalDate();
+
+        boolean alreadyCheckedIn = attendanceRepository
+                .findByUserIdAndDate(userId, todayPKT)
+                .isPresent();
+        if (alreadyCheckedIn) {
+            throw new IllegalStateException("Already checked in today");
+        }
+
+        Attendance attendance = new Attendance();
+        attendance.setUser(user);
+        attendance.setDate(todayPKT);
+        attendance.setCheckIn(nowPKT.toLocalDateTime());
+        attendance.setStatus(officeHoursService.calculateStatus(nowPKT.toLocalTime()));
+
+        System.out.println("Biometric check-in for user ID: " + userId + " at " + nowPKT.toLocalDateTime());
+        return mapToDto(attendanceRepository.save(attendance));
+    }
+
+    // ── Biometric device: check-out (no web-access guard) ────────────────────
+    // Called exclusively by the Hikvision webhook. Biometric employees have
+    // webCheckInAllowed = false, so the regular checkOut() would throw. This
+    // method stamps the current PKT time without consulting that flag.
+
+    @Transactional
+    public AttendanceDto biometricCheckOut(Long userId) {
+        ZonedDateTime nowPKT = ZonedDateTime.now(AppTimeZone.PKT);
+        System.out.println("Biometric check-out for user ID: " + userId + ", PKT: " + nowPKT);
+
+        Attendance attendance = attendanceRepository
+                .findFirstByUserIdAndCheckOutIsNullOrderByCheckInDesc(userId)
+                .orElseThrow(() -> new EntityNotFoundException(
+                        "No pending check-in found for user: " + userId));
+
+        if (attendance.getCheckOut() != null) {
+            throw new IllegalStateException("Already checked out");
+        }
+
+        attendance.setCheckOut(nowPKT.toLocalDateTime());
+        System.out.println("Biometric check-out saved for user ID: " + userId + " at " + nowPKT.toLocalDateTime());
+        return mapToDto(attendanceRepository.save(attendance));
+    }
+
+
 
     @Transactional
     public AttendanceDto adminUpdate(Long id, AttendanceDto dto, Authentication auth) {
