@@ -85,6 +85,25 @@ public class UserController {
         return ResponseEntity.ok(response);
     }
 
+    // ─── Update own profile (name, email) ─────────────────────────────────
+    @PutMapping("/{id}/update-profile")
+    @PreAuthorize("hasRole('SUPERADMIN') or hasRole('ADMIN') or hasRole('EMPLOYEE')")
+    public ResponseEntity<UserDTO> updateProfile(
+            @PathVariable Long id,
+            @RequestBody Map<String, String> profileRequest,
+            jakarta.servlet.http.HttpServletRequest request) {
+        
+        Long loggedInUserId = (Long) request.getAttribute("userId");
+        if (loggedInUserId == null || !loggedInUserId.equals(id)) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+        }
+
+        String newName = profileRequest.get("name");
+        String newEmail = profileRequest.get("email");
+
+        return ResponseEntity.ok(userService.updateProfile(id, newName, newEmail));
+    }
+
     // ─── Get all users currently on probation ─────────────────────────────
     @GetMapping("/probation/active")
     @PreAuthorize("hasRole('SUPERADMIN') or hasRole('ADMIN')")

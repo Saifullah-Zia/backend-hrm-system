@@ -87,6 +87,20 @@ public class UserService implements UserDetailsService {
         return convertToDTO(userRepository.save(existingUser));
     }
 
+    public UserDTO updateProfile(Long id, String name, String email) {
+        User existingUser = userRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("User not found with ID " + id));
+
+        if (name != null && !name.isBlank()) {
+            existingUser.setName(name.trim());
+        }
+        if (email != null && !email.isBlank()) {
+            existingUser.setEmail(email.trim());
+        }
+
+        return convertToDTO(userRepository.save(existingUser));
+    }
+
     public void deleteUser(Long id) {
         User user = userRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("User not found with ID " + id));
