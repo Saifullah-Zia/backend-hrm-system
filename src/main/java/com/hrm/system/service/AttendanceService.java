@@ -36,19 +36,22 @@ public class AttendanceService {
     private final AttendanceSummaryRepository attendanceSummaryRepository;
     private final PayrollPeriodRepository payrollPeriodRepository;
     private final LeaveRepository      leaveRepository;
+    private final LeaveBalanceService  leaveBalanceService;
 
     public AttendanceService(AttendanceRepository attendanceRepository,
                              UserRepository userRepository,
                              OfficeHoursService officeHoursService,
                              AttendanceSummaryRepository attendanceSummaryRepository,
                              PayrollPeriodRepository payrollPeriodRepository,
-                             LeaveRepository leaveRepository) {
+                             LeaveRepository leaveRepository,
+                             LeaveBalanceService leaveBalanceService) {
         this.attendanceRepository = attendanceRepository;
         this.userRepository       = userRepository;
         this.officeHoursService   = officeHoursService;
         this.attendanceSummaryRepository = attendanceSummaryRepository;
         this.payrollPeriodRepository = payrollPeriodRepository;
         this.leaveRepository      = leaveRepository;
+        this.leaveBalanceService  = leaveBalanceService;
     }
 
     // ── Admin: manual record creation ────────────────────────────────────────
@@ -85,7 +88,18 @@ public class AttendanceService {
             attendance.setCheckOut(checkOutPKT.toLocalDateTime());
         }
 
-        return mapToDto(attendanceRepository.save(attendance));
+        Attendance saved = attendanceRepository.save(attendance);
+
+        // If manually created with status ON_LEAVE, deduct 1 day from employee's leave balance
+        if ("ON_LEAVE".equalsIgnoreCase(saved.getStatus())) {
+            String category = (dto.getLeaveType() != null && !dto.getLeaveType().isBlank())
+                    ? dto.getLeaveType().toUpperCase()
+                    : "CASUAL";
+            int year = saved.getDate() != null ? saved.getDate().getYear() : LocalDate.now().getYear();
+            leaveBalanceService.deductDirectUsedDays(user.getId(), category, 1, year);
+        }
+
+        return mapToDto(saved);
     }
 
     // ── Employee: secure check-in (server stamps time) ───────────────────────
@@ -217,6 +231,10 @@ public class AttendanceService {
         Attendance attendance = attendanceRepository.findById(id)
                 .orElseThrow(() -> new EntityNotFoundException("Attendance not found: " + id));
 
+        String oldStatus = attendance.getStatus();
+        String newStatus = dto.getStatus() != null ? dto.getStatus() : oldStatus;
+        int year = attendance.getDate() != null ? attendance.getDate().getYear() : LocalDate.now().getYear();
+
         if (dto.getDate()   != null) attendance.setDate(dto.getDate());
         if (dto.getStatus() != null) attendance.setStatus(dto.getStatus());
 
@@ -231,7 +249,22 @@ public class AttendanceService {
             attendance.setCheckOut(checkOutPKT.toLocalDateTime());
         }
 
-        return mapToDto(attendanceRepository.save(attendance));
+        Attendance saved = attendanceRepository.save(attendance);
+
+        // Adjust leave balance if status transitioned to/from ON_LEAVE
+        if (!"ON_LEAVE".equalsIgnoreCase(oldStatus) && "ON_LEAVE".equalsIgnoreCase(newStatus)) {
+            String category = (dto.getLeaveType() != null && !dto.getLeaveType().isBlank())
+                    ? dto.getLeaveType().toUpperCase()
+                    : "CASUAL";
+            leaveBalanceService.deductDirectUsedDays(saved.getUser().getId(), category, 1, year);
+        } else if ("ON_LEAVE".equalsIgnoreCase(oldStatus) && !"ON_LEAVE".equalsIgnoreCase(newStatus)) {
+            String category = (dto.getLeaveType() != null && !dto.getLeaveType().isBlank())
+                    ? dto.getLeaveType().toUpperCase()
+                    : "CASUAL";
+            leaveBalanceService.refundDirectUsedDays(saved.getUser().getId(), category, 1, year);
+        }
+
+        return mapToDto(saved);
     }
 
     // ── Queries ───────────────────────────────────────────────────────────────
@@ -274,10 +307,16 @@ public class AttendanceService {
                 .orElseThrow(() -> new EntityNotFoundException("Attendance not found: " + id)));
     }
 
+    @Transactional
     public void delete(Long id) {
-        if (!attendanceRepository.existsById(id)) {
-            throw new EntityNotFoundException("Attendance not found: " + id);
+        Attendance attendance = attendanceRepository.findById(id)
+                .orElseThrow(() -> new EntityNotFoundException("Attendance not found: " + id));
+
+        if ("ON_LEAVE".equalsIgnoreCase(attendance.getStatus())) {
+            int year = attendance.getDate() != null ? attendance.getDate().getYear() : LocalDate.now().getYear();
+            leaveBalanceService.refundDirectUsedDays(attendance.getUser().getId(), "CASUAL", 1, year);
         }
+
         attendanceRepository.deleteById(id);
     }
 

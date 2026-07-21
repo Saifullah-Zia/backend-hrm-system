@@ -141,6 +141,19 @@ public class LeaveBalanceService {
         leaveBalanceRepository.decrementUsedDays(userId, leaveType.toUpperCase(), year, days);
     }
 
+    // ─── Direct deduction/refund for manual attendance ON_LEAVE ─────────────
+    @Transactional
+    public void deductDirectUsedDays(Long userId, String leaveType, int days, int year) {
+        if (leaveType == null || leaveType.equalsIgnoreCase("UNPAID")) return;
+        leaveBalanceRepository.incrementUsedDays(userId, leaveType.toUpperCase(), year, days);
+    }
+
+    @Transactional
+    public void refundDirectUsedDays(Long userId, String leaveType, int days, int year) {
+        if (leaveType == null || leaveType.equalsIgnoreCase("UNPAID")) return;
+        leaveBalanceRepository.decrementUsedDays(userId, leaveType.toUpperCase(), year, days);
+    }
+
     // ─── Admin: manually adjust a leave balance row ───────────────────────────
     @Transactional
     public LeaveBalanceDto updateBalance(Long id, LeaveBalanceUpdateRequest req) {

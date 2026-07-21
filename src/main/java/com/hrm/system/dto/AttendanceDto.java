@@ -19,6 +19,7 @@ public class AttendanceDto {
     private LocalDateTime checkIn;
     private LocalDateTime checkOut;
     private Long userId;
+    private String leaveType; // e.g. CASUAL, ANNUAL, SICK for manual ON_LEAVE entries
 
     @Data
     @NoArgsConstructor
