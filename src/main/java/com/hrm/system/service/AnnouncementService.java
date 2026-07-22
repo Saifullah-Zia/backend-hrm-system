@@ -43,8 +43,14 @@ public class AnnouncementService {
         dto.setActive(a.isActive());
         dto.setCreatedAt(a.getCreatedAt());
         dto.setUpdatedAt(a.getUpdatedAt());
-        dto.setCreatedBy(a.getCreatedBy());
-        dto.setUpdatedBy(a.getUpdatedBy());
+        if (a.getCreatedBy() != null) {
+            userRepository.findById(a.getCreatedBy())
+                    .ifPresent(u -> dto.setCreatedBy(u.getName()));
+        }
+        if (a.getUpdatedBy() != null) {
+            userRepository.findById(a.getUpdatedBy())
+                    .ifPresent(u -> dto.setUpdatedBy(u.getName()));
+        }
         return dto;
     }
 
@@ -72,7 +78,7 @@ public class AnnouncementService {
         Announcement a = new Announcement();
         a.setTitle(dto.getTitle());
         a.setContent(dto.getContent());
-        a.setActive(true);
+        a.setActive(dto.isActive());
 
         AnnouncementDto saved = toDto(announcementRepository.save(a));
 
