@@ -8,6 +8,9 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.web.bind.annotation.*;
 import java.util.List;
 import java.util.Map;
@@ -61,12 +64,25 @@ public class EmployeeProfileController {
         return ResponseEntity.ok(employeeProfileService.getById(id, checkRevealSalary(request)));
     }
 
-    // get profile by user id
+    // get profile by user id — employees can see their own salary; admins need OTP for others
     @GetMapping("/user/{userId}")
     public ResponseEntity<EmployeeProfileDto> getByUserId(
             @PathVariable Long userId,
             HttpServletRequest request) {
-        return ResponseEntity.ok(employeeProfileService.getByUserId(userId, checkRevealSalary(request)));
+        boolean revealSalary = checkRevealSalary(request);
+        if (!revealSalary) {
+            // Auto-reveal salary when the logged-in user is fetching their own profile
+            try {
+                Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+                if (auth != null && auth.isAuthenticated() && auth.getPrincipal() instanceof UserDetails ud) {
+                    Long requestingUserId = (Long) request.getAttribute("userId");
+                    if (requestingUserId != null && requestingUserId.equals(userId)) {
+                        revealSalary = true;
+                    }
+                }
+            } catch (Exception ignored) {}
+        }
+        return ResponseEntity.ok(employeeProfileService.getByUserId(userId, revealSalary));
     }
 
     @PostMapping
