@@ -92,9 +92,11 @@ public class PayrollController {
     @PreAuthorize("hasRole('SUPERADMIN') or hasRole('ADMIN')")
     public ResponseEntity<Page<PayRollDto>> getAllPayrolls(
             @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "10") int size) {
-        return ResponseEntity.ok(payRollService.getAllPayroll(page, size));
+            @RequestParam(defaultValue = "10") int size,
+            @RequestParam(required = false) String search) {
+        return ResponseEntity.ok(payRollService.getAllPayroll(page, size, search));
     }
+
 
     // ─── Ownership-enforced endpoints ──────────────────────────────────────────
 

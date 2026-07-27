@@ -394,10 +394,19 @@ public class PayRollService {
     // ─── Read all paginated (admin/superadmin only — enforced at controller level) ──
 
     @Transactional(readOnly = true)
-    public Page<PayRollDto> getAllPayroll(int page, int size) {
+    public Page<PayRollDto> getAllPayroll(int page, int size, String search) {
         Pageable pageable = PageRequest.of(page, size, Sort.by("id").descending());
+        if (search != null && !search.trim().isEmpty()) {
+            return payrollRepository.searchPayrolls(search.trim(), pageable).map(this::mapToDto);
+        }
         return payrollRepository.findAll(pageable).map(this::mapToDto);
     }
+
+    @Transactional(readOnly = true)
+    public Page<PayRollDto> getAllPayroll(int page, int size) {
+        return getAllPayroll(page, size, null);
+    }
+
 
     // ─── Read by ID — now with ownership + status enforcement ─────────────────
 

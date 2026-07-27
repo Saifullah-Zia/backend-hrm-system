@@ -18,6 +18,13 @@ public interface PayrollRepository extends JpaRepository<Payroll, Long> {
 
     // ─── Paginated ────────────────────────────────────────────────────────────
     Page<Payroll> findAll(Pageable pageable);
+
+    @Query("SELECT p FROM Payroll p WHERE " +
+           "LOWER(p.user.name) LIKE LOWER(CONCAT('%', :search, '%')) OR " +
+           "LOWER(CAST(p.status AS string)) LIKE LOWER(CONCAT('%', :search, '%')) OR " +
+           "LOWER(CONCAT(p.payrollPeriod.month, ' ', CAST(p.payrollPeriod.year AS string))) LIKE LOWER(CONCAT('%', :search, '%'))")
+    Page<Payroll> searchPayrolls(@Param("search") String search, Pageable pageable);
+
     Page<Payroll> findByUserId(Long userId, Pageable pageable);
 
     // ─── Non-paginated (kept for internal use) ────────────────────────────────
