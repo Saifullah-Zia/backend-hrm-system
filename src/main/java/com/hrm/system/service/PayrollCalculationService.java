@@ -28,11 +28,13 @@ public class PayrollCalculationService {
         return basicSalary / workingDays;
     }
 
+    public double calculateGrossSalary(double basicSalary, double totalAllowances, double totalBonuses) {
+        return basicSalary + (totalAllowances > 0 ? totalAllowances : 0.0) + (totalBonuses > 0 ? totalBonuses : 0.0);
+    }
+
     public double calculateGrossSalary(double basicSalary, int presentDays, int paidLeaveDays, 
                                        double totalAllowances, double totalBonuses) {
-        double dailySalary = calculateDailySalary(basicSalary, presentDays + paidLeaveDays);
-        double attendanceSalary = dailySalary * (presentDays + paidLeaveDays);
-        return attendanceSalary + totalAllowances + totalBonuses;
+        return calculateGrossSalary(basicSalary, totalAllowances, totalBonuses);
     }
 
     public double calculateDeductions(int unpaidLeaveDays, int absentDays, int lateDays, 

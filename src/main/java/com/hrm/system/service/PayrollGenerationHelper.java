@@ -82,14 +82,27 @@ public class PayrollGenerationHelper {
 
         double basicSalary   = employee.getBasicSalary() != null ? employee.getBasicSalary() : 0.0;
         int    workingDays   = attendanceSummary.getWorkingDays()    != null ? attendanceSummary.getWorkingDays()    : 26;
-        double dailySalary   = payrollCalculationService.calculateDailySalary(basicSalary, workingDays);
+        
+        int daysInMonth = 30;
+        try {
+            String mStr = payrollPeriod.getMonth();
+            if (mStr != null && mStr.contains(" ")) mStr = mStr.split(" ")[0];
+            if (mStr != null && payrollPeriod.getYear() != null) {
+                java.time.YearMonth ym = java.time.YearMonth.of(payrollPeriod.getYear(), java.time.Month.valueOf(mStr.trim().toUpperCase()));
+                daysInMonth = ym.lengthOfMonth();
+            }
+        } catch (Exception e) {
+            daysInMonth = workingDays > 0 ? workingDays : 30;
+        }
+
+        double dailySalary   = payrollCalculationService.calculateDailySalary(basicSalary, daysInMonth);
         int    presentDays   = attendanceSummary.getPresentDays()    != null ? attendanceSummary.getPresentDays()    : 0;
         int    paidLeaveDays = attendanceSummary.getPaidLeaveDays()  != null ? attendanceSummary.getPaidLeaveDays()  : 0;
         int    unpaidLeave   = attendanceSummary.getUnpaidLeaveDays()!= null ? attendanceSummary.getUnpaidLeaveDays(): 0;
         int    absentDays    = attendanceSummary.getAbsentDays()     != null ? attendanceSummary.getAbsentDays()     : 0;
         int    lateDays      = attendanceSummary.getLateDays()       != null ? attendanceSummary.getLateDays()       : 0;
 
-        double grossSalary = payrollCalculationService.calculateGrossSalary(basicSalary, presentDays, paidLeaveDays, 0.0, 0.0);
+        double grossSalary = payrollCalculationService.calculateGrossSalary(basicSalary, 0.0, 0.0);
         double deductions  = payrollCalculationService.calculateDeductions(unpaidLeave, absentDays, lateDays, dailySalary, 0.0);
         double netSalary   = payrollCalculationService.calculateNetSalary(grossSalary, deductions);
 

@@ -130,4 +130,19 @@ public class PayrollController {
         payRollService.deletePayroll(id);
         return ResponseEntity.ok("Payroll record Deleted successfully");
     }
-}
+
+    @DeleteMapping("/bulk")
+    @PreAuthorize("hasRole('SUPERADMIN') or hasRole('ADMIN')")
+    public ResponseEntity<String> deleteBulkPayroll(@RequestBody java.util.List<Long> ids) {
+        payRollService.deleteBulkPayroll(ids);
+        return ResponseEntity.ok("Payroll records deleted successfully: " + ids.size());
+    }
+
+    @PutMapping("/bulk-approve")
+    @PreAuthorize("hasRole('SUPERADMIN') or hasRole('ADMIN')")
+    public ResponseEntity<java.util.List<PayRollDto>> approveBulkPayroll(
+            @RequestBody java.util.List<Long> ids,
+            @RequestParam Long approvedBy) {
+        return ResponseEntity.ok(payRollService.approveBulkPayroll(ids, approvedBy));
+    }
+}

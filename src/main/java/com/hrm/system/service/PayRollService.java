@@ -80,7 +80,20 @@ public class PayRollService {
 
         double basicSalary = employee.getBasicSalary() != null ? employee.getBasicSalary() : 0.0;
         int workingDays = attendanceSummary.getWorkingDays() != null ? attendanceSummary.getWorkingDays() : 26;
-        double dailySalary = payrollCalculationService.calculateDailySalary(basicSalary, workingDays);
+
+        // Calculate daily salary using calendar days of the payroll month
+        int daysInMonth = 30;
+        try {
+            String mStr = payrollPeriod.getMonth();
+            if (mStr != null && mStr.contains(" ")) mStr = mStr.split(" ")[0];
+            if (mStr != null && payrollPeriod.getYear() != null) {
+                java.time.YearMonth ym = java.time.YearMonth.of(payrollPeriod.getYear(), java.time.Month.valueOf(mStr.trim().toUpperCase()));
+                daysInMonth = ym.lengthOfMonth();
+            }
+        } catch (Exception ex) {
+            daysInMonth = workingDays > 0 ? workingDays : 30;
+        }
+        double dailySalary = payrollCalculationService.calculateDailySalary(basicSalary, daysInMonth);
 
         Payroll payroll = new Payroll();
         payroll.setPayrollPeriod(payrollPeriod);
@@ -100,10 +113,7 @@ public class PayRollService {
         payroll.setGeneratedBy(generatedBy);
         payroll.setGeneratedAt(LocalDateTime.now());
 
-        int presentDays = attendanceSummary.getPresentDays() != null ? attendanceSummary.getPresentDays() : 0;
-        int paidLeaveDays = attendanceSummary.getPaidLeaveDays() != null ? attendanceSummary.getPaidLeaveDays() : 0;
-        double grossSalary = payrollCalculationService.calculateGrossSalary(
-                basicSalary, presentDays, paidLeaveDays, 0.0, 0.0);
+        double grossSalary = payrollCalculationService.calculateGrossSalary(basicSalary, 0.0, 0.0);
         payroll.setGrossSalary(grossSalary);
 
         int unpaidLeaveDays = attendanceSummary.getUnpaidLeaveDays() != null ? attendanceSummary.getUnpaidLeaveDays() : 0;
@@ -443,17 +453,33 @@ public class PayRollService {
         Payroll payroll = payrollRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Payroll not found for ID: " + id));
 
-        payroll.setBasicSalary(dto.getSalary() != null ? dto.getSalary() : 0.0);
-        payroll.setTotalBonuses(dto.getBonuses() != null ? dto.getBonuses() : 0.0);
-        payroll.setTotalDeductions(dto.getDeductions() != null ? dto.getDeductions() : 0.0);
-        payroll.setNetSalary(calculateNetSalary(
-                payroll.getBasicSalary(),
-                payroll.getTotalBonuses(),
-                payroll.getTotalDeductions()
-        ));
+        if (dto.getTotalBonuses() != null)    payroll.setTotalBonuses(dto.getTotalBonuses());
+        else if (dto.getBonuses() != null)    payroll.setTotalBonuses(dto.getBonuses());
+
+        if (dto.getTotalAllowances() != null) payroll.setTotalAllowances(dto.getTotalAllowances());
+
         if (dto.getStatus() != null) {
             payroll.setStatus(PayrollStatus.valueOf(dto.getStatus()));
         }
+
+        // Recalculate gross & net using attendance-based daily salary still stored
+        double grossSalary = payrollCalculationService.calculateGrossSalary(
+                payroll.getBasicSalary(),
+                payroll.getTotalAllowances() != null ? payroll.getTotalAllowances() : 0.0,
+                payroll.getTotalBonuses()    != null ? payroll.getTotalBonuses()    : 0.0
+        );
+        payroll.setGrossSalary(grossSalary);
+
+        // Attendance deductions remain as-is; only manual deduction override from dto
+        double attendanceDeductions = payroll.getTotalDeductions() != null ? payroll.getTotalDeductions() : 0.0;
+        if (dto.getDeductions() != null) {
+            // If caller explicitly sends deductions, honour it (legacy path)
+            attendanceDeductions = dto.getDeductions();
+            payroll.setTotalDeductions(attendanceDeductions);
+        }
+
+        double netSalary = payrollCalculationService.calculateNetSalary(grossSalary, attendanceDeductions);
+        payroll.setNetSalary(netSalary);
 
         Payroll saved = payrollRepository.save(payroll);
 
@@ -467,6 +493,47 @@ public class PayRollService {
         );
 
         return mapToDto(saved);
+    }
+
+    // ─── Bulk Delete ──────────────────────────────────────────────────────────
+
+    @Transactional
+    public void deleteBulkPayroll(List<Long> ids) {
+        for (Long id : ids) {
+            Payroll payroll = payrollRepository.findById(id)
+                    .orElseThrow(() -> new RuntimeException("Payroll not found: " + id));
+            if (payroll.getStatus() == PayrollStatus.PAID) {
+                throw new RuntimeException("Cannot delete paid payroll (ID: " + id + ")");
+            }
+            payrollRepository.deleteById(id);
+        }
+    }
+
+    // ─── Bulk Approve ─────────────────────────────────────────────────────────
+
+    @Transactional
+    public List<PayRollDto> approveBulkPayroll(List<Long> ids, Long approvedBy) {
+        List<PayRollDto> results = new java.util.ArrayList<>();
+        for (Long id : ids) {
+            Payroll payroll = payrollRepository.findById(id)
+                    .orElseThrow(() -> new RuntimeException("Payroll not found: " + id));
+            if (payroll.getStatus() == PayrollStatus.APPROVED || payroll.getStatus() == PayrollStatus.PAID) {
+                results.add(mapToDto(payroll));
+                continue;
+            }
+            payroll.setStatus(PayrollStatus.APPROVED);
+            payroll.setApprovedBy(approvedBy);
+            payroll.setApprovedAt(LocalDateTime.now());
+            Payroll saved = payrollRepository.save(payroll);
+            notificationService.createNotification(
+                    payroll.getUser().getId(),
+                    String.format("💰 Your payroll for %s %s has been approved. Net salary: %.2f",
+                            payroll.getPayrollPeriod().getMonth(), payroll.getPayrollPeriod().getYear(), saved.getNetSalary()),
+                    "PAYROLL", payroll.getUser().getId(), saved.getId()
+            );
+            results.add(mapToDto(saved));
+        }
+        return results;
     }
 
     // ─── Delete ───────────────────────────────────────────────────────────────
