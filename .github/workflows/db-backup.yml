@@ -2,18 +2,35 @@ name: Postgres Backup
 
 on:
   schedule:
-       - cron: '0 2 * * 0'
+    - cron: '0 2 * * 0'
   workflow_dispatch:
 
 jobs:
   backup:
     runs-on: ubuntu-latest
+
     steps:
-      - name: Install postgresql-client
-        run: sudo apt-get update && sudo apt-get install -y postgresql-client
+      - name: Install PostgreSQL 18 client
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y curl ca-certificates gnupg lsb-release
+
+          curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc | \
+            sudo gpg --dearmor -o /usr/share/keyrings/postgresql.gpg
+
+          echo "deb [signed-by=/usr/share/keyrings/postgresql.gpg] http://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" | \
+            sudo tee /etc/apt/sources.list.d/pgdg.list
+
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client-18
+
+          pg_dump --version
 
       - name: Dump database
-        run: pg_dump "${{ secrets.DATABASE_URL }}" -F c -f backup-$(date +%F).dump
+        run: |
+          pg_dump "${{ secrets.DATABASE_URL }}" \
+            -F c \
+            -f backup-$(date +%F).dump
 
       - name: Install AWS CLI
         run: pip install awscli
