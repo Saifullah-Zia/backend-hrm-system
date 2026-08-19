@@ -48,7 +48,8 @@ public class StartupMaintenanceService {
             jdbcTemplate.execute("ALTER TABLE payroll DROP COLUMN IF EXISTS bonuses");
             jdbcTemplate.execute("UPDATE leave_balances SET total_days = 0 WHERE (leave_type = 'EIDULFITAR' OR leave_type = 'EIDULAZHA') AND total_days = 3 AND used_days = 0");
             jdbcTemplate.execute("UPDATE leave_policies SET total_days_per_year = 0 WHERE leave_type = 'EIDULFITAR' OR leave_type = 'EIDULAZHA'");
-            System.out.println("✅ Legacy database columns cleanup and Eid balance reset finished successfully.");
+            jdbcTemplate.execute("UPDATE leave_balances lb SET total_days = lp.total_days_per_year FROM leave_policies lp WHERE lb.leave_type = lp.leave_type AND lb.used_days = 0 AND lb.pending_days = 0");
+            System.out.println("✅ Legacy database columns cleanup and leave policy sync finished successfully.");
         } catch (Exception e) {
             System.err.println("⚠️ Legacy database column cleanup failed: " + e.getMessage());
         }

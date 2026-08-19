@@ -4,7 +4,9 @@ import com.hrm.system.dto.LeaveBalanceDto;
 import com.hrm.system.dto.LeaveBalanceUpdateRequest;
 import com.hrm.system.model.LeaveBalance;
 import com.hrm.system.model.User;
+import com.hrm.system.model.LeavePolicy;
 import com.hrm.system.repository.LeaveBalanceRepository;
+import com.hrm.system.repository.LeavePolicyRepository;
 import com.hrm.system.repository.UserRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
@@ -26,7 +28,13 @@ public class LeaveBalanceService {
     private LeaveBalanceRepository leaveBalanceRepository;
 
     @Autowired
+    private LeavePolicyRepository leavePolicyRepository;
+
+    @Autowired
     private UserRepository userRepository;
+
+    @Autowired
+    private LeaveEligibilityService leaveEligibilityService;
 
     // ─── Get all balances for a user in the current year (paginated) ──────────
     @Transactional(readOnly = true)
@@ -49,24 +57,51 @@ public class LeaveBalanceService {
     // ─── Initialize leave balances for a user for a given year ───────────────
     @Transactional
     public void initializeBalancesForUser(User user, int year) {
-        Map<String, Integer> defaultDays = Map.of(
-                "SICK",       10,
-                "CASUAL",     12,
-                "EIDULFITAR",  0,
-                "EIDULAZHA",   0
-        );
+        List<LeavePolicy> policies = leavePolicyRepository.findAll();
+        if (policies.isEmpty()) {
+            Map<String, Integer> defaultDays = Map.of(
+                    "SICK",       8,
+                    "CASUAL",     10,
+                    "EIDULFITAR",  0,
+                    "EIDULAZHA",   0
+            );
 
-        for (Map.Entry<String, Integer> entry : defaultDays.entrySet()) {
+            for (Map.Entry<String, Integer> entry : defaultDays.entrySet()) {
+                boolean exists = leaveBalanceRepository
+                        .findByUserIdAndLeaveTypeAndYear(user.getId(), entry.getKey(), year)
+                        .isPresent();
+
+                if (!exists) {
+                    LeaveBalance balance = LeaveBalance.builder()
+                            .user(user)
+                            .leaveType(entry.getKey())
+                            .year(year)
+                            .totalDays(entry.getValue())
+                            .usedDays(0)
+                            .pendingDays(0)
+                            .carryForwardDays(0)
+                            .build();
+                    leaveBalanceRepository.save(balance);
+                }
+            }
+            return;
+        }
+
+        for (LeavePolicy policy : policies) {
+            if (policy.getRequiresOneYear() && !leaveEligibilityService.hasCompletedOneYear(user)) {
+                continue;
+            }
+
             boolean exists = leaveBalanceRepository
-                    .findByUserIdAndLeaveTypeAndYear(user.getId(), entry.getKey(), year)
+                    .findByUserIdAndLeaveTypeAndYear(user.getId(), policy.getLeaveType(), year)
                     .isPresent();
 
             if (!exists) {
                 LeaveBalance balance = LeaveBalance.builder()
                         .user(user)
-                        .leaveType(entry.getKey())
+                        .leaveType(policy.getLeaveType())
                         .year(year)
-                        .totalDays(entry.getValue())
+                        .totalDays(policy.getTotalDaysPerYear())
                         .usedDays(0)
                         .pendingDays(0)
                         .carryForwardDays(0)
