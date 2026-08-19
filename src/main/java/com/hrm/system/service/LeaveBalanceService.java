@@ -52,8 +52,8 @@ public class LeaveBalanceService {
         Map<String, Integer> defaultDays = Map.of(
                 "SICK",       10,
                 "CASUAL",     12,
-                "EIDULFITAR",  3,
-                "EIDULAZHA",   3
+                "EIDULFITAR",  0,
+                "EIDULAZHA",   0
         );
 
         for (Map.Entry<String, Integer> entry : defaultDays.entrySet()) {

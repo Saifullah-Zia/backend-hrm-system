@@ -41,9 +41,9 @@ public class LeavePolicyService {
         seedIfAbsent("SICK",        8, false, false, 0,  false, null);
         seedIfAbsent("CASUAL",      10, false, false, 0,  false, null);
         seedIfAbsent("ANNUAL",      14, true,  true,  7,  false, null);
-        // Eid leaves: 3 days each, can apply up to 2 days before the event
-        seedIfAbsent("EIDULFITAR",  3,  false, false, 0,  true,  2);
-        seedIfAbsent("EIDULAZHA",   3,  false, false, 0,  true,  2);
+        // Eid leaves: 0 default days per year
+        seedIfAbsent("EIDULFITAR",  0,  false, false, 0,  true,  2);
+        seedIfAbsent("EIDULAZHA",   0,  false, false, 0,  true,  2);
     }
 
     private void seedIfAbsent(String type, int days, boolean requiresOneYear,
