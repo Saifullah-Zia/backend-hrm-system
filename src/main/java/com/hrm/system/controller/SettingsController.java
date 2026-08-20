@@ -17,7 +17,7 @@ public class SettingsController {
 
     private final OfficeHoursService officeHoursService;
 
-    @Value("${office.allowed.ips:58.65.129.12,127.0.0.1,0:0:0:0:0:0:0:1}")
+    @Value("${office.allowed.ips:58.65.129.12}")
     private String allowedOfficeIps;
 
     public SettingsController(OfficeHoursService officeHoursService) {
@@ -37,11 +37,12 @@ public class SettingsController {
 
     @GetMapping("/my-ip")
     public ResponseEntity<Map<String, String>> getMyIp(HttpServletRequest request) {
-        String xf = request.getHeader("X-Forwarded-For");
-        String clientIp = (xf != null && !xf.isBlank()) ? xf.split(",")[0].trim() : request.getRemoteAddr();
-
         Map<String, String> result = new HashMap<>();
-        result.put("clientIp", clientIp);
+        result.put("remoteAddr",       String.valueOf(request.getRemoteAddr()));
+        result.put("x-forwarded-for",  String.valueOf(request.getHeader("X-Forwarded-For")));
+        result.put("x-real-ip",        String.valueOf(request.getHeader("X-Real-IP")));
+        result.put("cf-connecting-ip", String.valueOf(request.getHeader("CF-Connecting-IP")));
+        result.put("resolvedClientIp", com.hrm.system.util.IpUtil.getClientIp(request));
         result.put("configuredOfficeIps", allowedOfficeIps);
         return ResponseEntity.ok(result);
     }
