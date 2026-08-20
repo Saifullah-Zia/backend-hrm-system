@@ -67,6 +67,7 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                         .requestMatchers("/api/auth/**", "/api/auth/login", "/api/auth/register").permitAll()
+                        .requestMatchers("/api/settings/my-ip").permitAll()
                         .requestMatchers("/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html", "/swagger-resources/**", "/webjars/**").permitAll()
                         .requestMatchers("/api/ws-chat/**").permitAll()
                         .requestMatchers("/api/hikvision/webhook").permitAll()
