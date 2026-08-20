@@ -23,6 +23,12 @@ public class AuthService {
     private final EmailService emailService;
     private final LeaveBalanceService leaveBalanceService;
 
+    @org.springframework.beans.factory.annotation.Value("${office.allowed.ips:58.65.129.12}")
+    private String allowedOfficeIps;
+
+    @org.springframework.beans.factory.annotation.Value("${office.allow.localhost:true}")
+    private boolean allowLocalhost;
+
     public AuthService(UserRepository userRepository,
                        JwtUtil jwtUtil,
                        PasswordEncoder passwordEncoder,
@@ -37,6 +43,10 @@ public class AuthService {
 
     // ── LOGIN ──────────────────────────────────────────────────────────────
     public User authenticate(String email, String password) {
+        return authenticate(email, password, "");
+    }
+
+    public User authenticate(String email, String password, String clientIp) {
         User user = userRepository.findByEmail(email)
                 .orElseThrow(() -> new RuntimeException("User not found"));
 
@@ -46,6 +56,18 @@ public class AuthService {
 
         if (!user.isEnabled()) {
             throw new RuntimeException("Email not verified. Please check your inbox for the OTP.");
+        }
+
+        // Office Wi-Fi access restriction check for employees during login
+        boolean isPrivileged = user.getRole() == com.hrm.system.model.Role.ADMIN || user.getRole() == com.hrm.system.model.Role.SUPERADMIN;
+        boolean isRemoteAllowed = user.isOutsideAccessAllowed();
+
+        if (!isPrivileged && !isRemoteAllowed) {
+            boolean isOffice = com.hrm.system.util.IpUtil.isAllowedIp(clientIp, allowedOfficeIps, allowLocalhost);
+            if (!isOffice) {
+                log.warn("Blocked login for employee {} from IP {} (outside Office Wi-Fi)", email, clientIp);
+                throw new RuntimeException("HRM login is restricted to Office Wi-Fi. Please connect to Office Wi-Fi or request remote access from HR.");
+            }
         }
 
         return user;

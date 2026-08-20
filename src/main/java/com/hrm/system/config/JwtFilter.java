@@ -23,8 +23,11 @@ public class JwtFilter extends OncePerRequestFilter {
     private final JwtUtil jwtUtil;
     private final UserService userService;
 
-    @org.springframework.beans.factory.annotation.Value("${office.allowed.ips:58.65.129.12,127.0.0.1,0:0:0:0:0:0:0:1}")
+    @org.springframework.beans.factory.annotation.Value("${office.allowed.ips:58.65.129.12}")
     private String allowedOfficeIps;
+
+    @org.springframework.beans.factory.annotation.Value("${office.allow.localhost:true}")
+    private boolean allowLocalhost;
 
     public JwtFilter(JwtUtil jwtUtil, UserService userService) {
         this.jwtUtil = jwtUtil;
@@ -32,25 +35,11 @@ public class JwtFilter extends OncePerRequestFilter {
     }
 
     private String getClientIp(HttpServletRequest request) {
-        String xf = request.getHeader("X-Forwarded-For");
-        if (xf != null && !xf.isBlank()) {
-            return xf.split(",")[0].trim();
-        }
-        return request.getRemoteAddr();
+        return com.hrm.system.util.IpUtil.getClientIp(request);
     }
 
     private boolean isOfficeIp(String clientIp) {
-        if (allowedOfficeIps == null || allowedOfficeIps.trim().equals("*")) {
-            return true;
-        }
-        String[] ips = allowedOfficeIps.split(",");
-        for (String ip : ips) {
-            String trimmed = ip.trim();
-            if (trimmed.equalsIgnoreCase(clientIp) || trimmed.equals("127.0.0.1") || trimmed.equals("0:0:0:0:0:0:0:1")) {
-                return true;
-            }
-        }
-        return false;
+        return com.hrm.system.util.IpUtil.isAllowedIp(clientIp, allowedOfficeIps, allowLocalhost);
     }
 
     @Override

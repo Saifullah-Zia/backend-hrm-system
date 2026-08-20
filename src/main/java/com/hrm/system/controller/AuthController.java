@@ -50,8 +50,9 @@ public class AuthController {
     }
 
     @PostMapping("/login")
-    public ResponseEntity<?> login(@RequestBody LoginRequest request) {
-        User user = authService.authenticate(request.getEmail(), request.getPassword());
+    public ResponseEntity<?> login(@RequestBody LoginRequest request, jakarta.servlet.http.HttpServletRequest httpRequest) {
+        String clientIp = com.hrm.system.util.IpUtil.getClientIp(httpRequest);
+        User user = authService.authenticate(request.getEmail(), request.getPassword(), clientIp);
 
         String accessToken  = jwtUtil.generateToken(
                 user.getName(), user.getRole().name(), user.getId(), user.getEmail());
