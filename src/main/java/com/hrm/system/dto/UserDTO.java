@@ -25,4 +25,5 @@ public class UserDTO {
 
     // attendance access
     private boolean webCheckInAllowed;
+    private boolean outsideAccessAllowed;
 }

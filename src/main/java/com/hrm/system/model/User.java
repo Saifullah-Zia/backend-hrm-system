@@ -126,11 +126,15 @@ public class User {
     @Column(columnDefinition = "boolean default false")
     private Boolean probationNotificationSent = false;
 
-    // ─── Attendance access control ────────────────────────────────────────
     /** When false, the employee must use the biometric device to check in/out.
      *  Admin can enable this per-employee from the dashboard. */
     @Column(name = "web_check_in_allowed", columnDefinition = "boolean default false")
     private boolean webCheckInAllowed = false;
+
+    /** When false, the employee can ONLY access HRM when connected to Office Wi-Fi.
+     *  Admin can enable remote access per-employee from the dashboard. */
+    @Column(name = "outside_access_allowed", columnDefinition = "boolean default false")
+    private boolean outsideAccessAllowed = false;
 
     // Audit fields
     @CreatedDate

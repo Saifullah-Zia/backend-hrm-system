@@ -140,4 +140,16 @@ public class UserController {
         return ResponseEntity.ok(userService.updateWebCheckInAccess(id, allowed));
     }
 
+    // ─── Toggle outside / remote access per employee ──────────────────────
+    @PatchMapping("/{id}/outside-access")
+    @PreAuthorize("hasRole('SUPERADMIN') or hasRole('ADMIN')")
+    public ResponseEntity<UserDTO> setOutsideAccess(
+            @PathVariable Long id,
+            @RequestBody java.util.Map<String, Boolean> body) {
+        Boolean allowed = body.get("allowed");
+        if (allowed == null) {
+            return ResponseEntity.badRequest().build();
+        }
+        return ResponseEntity.ok(userService.updateOutsideAccess(id, allowed));
+    }
 }

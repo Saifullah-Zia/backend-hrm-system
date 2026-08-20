@@ -14,12 +14,18 @@ public class CustomUserDetails implements UserDetails {
     private final String username;
     private final String password;
     private final List<GrantedAuthority> authorities;
+    private final User user;
 
     public CustomUserDetails(User user) {
+        this.user = user;
         this.id = user.getId();
         this.username = user.getName();
         this.password = user.getPassword();
         this.authorities = List.of(new SimpleGrantedAuthority("ROLE_" + user.getRole().name()));
+    }
+
+    public User getUser() {
+        return user;
     }
 
     public Long getId() {

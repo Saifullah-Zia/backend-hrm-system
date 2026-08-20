@@ -23,9 +23,34 @@ public class JwtFilter extends OncePerRequestFilter {
     private final JwtUtil jwtUtil;
     private final UserService userService;
 
+    @org.springframework.beans.factory.annotation.Value("${office.allowed.ips:58.65.129.12,127.0.0.1,0:0:0:0:0:0:0:1}")
+    private String allowedOfficeIps;
+
     public JwtFilter(JwtUtil jwtUtil, UserService userService) {
         this.jwtUtil = jwtUtil;
         this.userService = userService;
+    }
+
+    private String getClientIp(HttpServletRequest request) {
+        String xf = request.getHeader("X-Forwarded-For");
+        if (xf != null && !xf.isBlank()) {
+            return xf.split(",")[0].trim();
+        }
+        return request.getRemoteAddr();
+    }
+
+    private boolean isOfficeIp(String clientIp) {
+        if (allowedOfficeIps == null || allowedOfficeIps.trim().equals("*")) {
+            return true;
+        }
+        String[] ips = allowedOfficeIps.split(",");
+        for (String ip : ips) {
+            String trimmed = ip.trim();
+            if (trimmed.equalsIgnoreCase(clientIp) || trimmed.equals("127.0.0.1") || trimmed.equals("0:0:0:0:0:0:0:1")) {
+                return true;
+            }
+        }
+        return false;
     }
 
     @Override
@@ -38,7 +63,7 @@ public class JwtFilter extends OncePerRequestFilter {
         String path = request.getRequestURI();
         System.out.println("[JwtFilter] Request Path: " + path);
 
-        if (path.startsWith("/api/auth")) {
+        if (path.startsWith("/api/auth") || path.startsWith("/api/system/my-ip")) {
             filterChain.doFilter(request, response);
             return;
         }
@@ -61,6 +86,24 @@ public class JwtFilter extends OncePerRequestFilter {
 
                         String role = jwtUtil.extractRole(token);
                         System.out.println("[JwtFilter] Role extracted: " + role);
+
+                        // ✅ Location / Office Wi-Fi access restriction for employees
+                        if (userDetails instanceof com.hrm.system.security.CustomUserDetails) {
+                            com.hrm.system.security.CustomUserDetails customUser = (com.hrm.system.security.CustomUserDetails) userDetails;
+                            com.hrm.system.model.User userEntity = customUser.getUser();
+                            
+                            boolean isPrivileged = "ADMIN".equalsIgnoreCase(role) || "SUPERADMIN".equalsIgnoreCase(role);
+                            boolean isRemoteAllowed = userEntity.isOutsideAccessAllowed();
+                            String clientIp = getClientIp(request);
+                            boolean isOffice = isOfficeIp(clientIp);
+
+                            if (!isPrivileged && !isRemoteAllowed && !isOffice) {
+                                System.out.println("[JwtFilter] Blocked employee " + username + " from IP " + clientIp + " (Outside Office Wi-Fi)");
+                                sendError(response, HttpServletResponse.SC_FORBIDDEN,
+                                        "HRM access is restricted to Office Wi-Fi. Please connect to Office Wi-Fi or request remote access from HR.");
+                                return;
+                            }
+                        }
 
                         // ✅ Extract userId from JWT and store in request attribute
                         Long userId = jwtUtil.extractUserId(token);

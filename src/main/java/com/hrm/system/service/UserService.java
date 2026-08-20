@@ -149,7 +149,8 @@ public class UserService implements UserDetailsService {
                 user.getProbationStartDate(),
                 user.getProbationEndDate(),
                 user.getProbationStatus(),
-                user.isWebCheckInAllowed()
+                user.isWebCheckInAllowed(),
+                user.isOutsideAccessAllowed()
         );
     }
 
@@ -158,6 +159,14 @@ public class UserService implements UserDetailsService {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new RuntimeException("User not found with ID " + userId));
         user.setWebCheckInAllowed(allowed);
+        return convertToDTO(userRepository.save(user));
+    }
+
+    /** Admin-only: enable or disable access outside Office Wi-Fi for a specific employee. */
+    public UserDTO updateOutsideAccess(Long userId, boolean allowed) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new RuntimeException("User not found with ID " + userId));
+        user.setOutsideAccessAllowed(allowed);
         return convertToDTO(userRepository.save(user));
     }
 
