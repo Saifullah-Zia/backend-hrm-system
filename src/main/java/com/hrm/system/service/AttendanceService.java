@@ -141,9 +141,12 @@ public class AttendanceService {
         ZonedDateTime nowPKT   = ZonedDateTime.now(AppTimeZone.PKT);
         System.out.println("checkOut called for user ID: " + userId + ", current PKT time: " + nowPKT);
 
-        // Find the most recent attendance record with no check-out
+        // Find the most recent attendance record with a REAL check-in and no
+        // check-out yet. Must require checkIn != null — otherwise a leave day
+        // placeholder (checkIn == null, checkOut == null) can sort ahead of a
+        // genuine open punch and get a phantom checkout stamped on it instead.
         Attendance attendance = attendanceRepository
-                .findFirstByUserIdAndCheckOutIsNullOrderByCheckInDesc(userId)
+                .findFirstByUserIdAndCheckInIsNotNullAndCheckOutIsNullOrderByCheckInDesc(userId)
                 .orElseThrow(() -> new EntityNotFoundException(
                         "No pending check-in found. Please check in first."));
         System.out.println("Found attendance record for user ID: " + userId + ", check-in time: " + attendance.getCheckIn() + ", date: " + attendance.getDate());
@@ -202,8 +205,10 @@ public class AttendanceService {
         ZonedDateTime nowPKT = ZonedDateTime.now(AppTimeZone.PKT);
         System.out.println("Biometric check-out for user ID: " + userId + ", PKT: " + nowPKT);
 
+        // Same fix as checkOut(): only ever close a record that has a real
+        // check-in, never a leave placeholder.
         Attendance attendance = attendanceRepository
-                .findFirstByUserIdAndCheckOutIsNullOrderByCheckInDesc(userId)
+                .findFirstByUserIdAndCheckInIsNotNullAndCheckOutIsNullOrderByCheckInDesc(userId)
                 .orElseThrow(() -> new EntityNotFoundException(
                         "No pending check-in found for user: " + userId));
 
@@ -613,6 +618,34 @@ public class AttendanceService {
         dto.setWorkingDays(summary.getWorkingDays());
         dto.setCreatedAt(summary.getCreatedAt());
         return dto;
+    }
+
+    // ── Scheduled Job: Auto Check-Out ────────────────────────────────────────────
+
+    // Shift is 5:00 PM – 2:00 AM PKT. Runs 15 minutes after shift end so that
+    // anyone who checked in (web or biometric) and never checked out gets
+    // closed out automatically — this fires on the server regardless of
+    // whether anyone has the site open, unlike a browser-triggered checkout.
+    // Leave/placeholder rows (checkIn == null) are excluded by the query, so
+    // ON_LEAVE / UNPAID_LEAVE days are never touched.
+    @Scheduled(cron = "0 15 2 * * *", zone = "Asia/Karachi") // runs 2:15 AM PKT daily
+    @Transactional
+    public void autoCheckoutOpenPunches() {
+        ZonedDateTime nowPKT = ZonedDateTime.now(AppTimeZone.PKT);
+        LocalDateTime cutoffPKT = nowPKT.toLocalDateTime();
+
+        List<Attendance> openPunches = attendanceRepository
+                .findByCheckInIsNotNullAndCheckOutIsNullAndStatusNotIn(
+                        List.of("ON_LEAVE", "UNPAID_LEAVE"));
+
+        for (Attendance a : openPunches) {
+            a.setCheckOut(cutoffPKT);
+            attendanceRepository.save(a);
+            System.out.println("Auto checkout: user " + a.getUser().getId()
+                    + " closed at " + cutoffPKT + " (checked in " + a.getCheckIn() + ")");
+        }
+
+        System.out.println("Auto checkout job: closed " + openPunches.size() + " open punch(es) at " + cutoffPKT);
     }
 
     // ── Scheduled Job: Mark Absences ─────────────────────────────────────────────
