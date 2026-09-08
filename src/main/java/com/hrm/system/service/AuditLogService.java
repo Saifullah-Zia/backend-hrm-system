@@ -33,9 +33,11 @@ public class AuditLogService {
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void log(AuditLogDto.LogRequest request) {
         try {
-            User performer = userRepository.findById(request.getPerformedByUserId())
-                    .orElseThrow(() -> new ResourceNotFoundException(
-                            "User not found: " + request.getPerformedByUserId()));
+            User performer = null;
+            if (request.getPerformedByUserId() != null) {
+                performer = userRepository.findById(request.getPerformedByUserId()).orElse(null);
+            }
+            String performerName = performer != null ? performer.getName() : "System";
 
             AuditLog entry = AuditLog.builder()
                     .entityName(request.getEntityName())
@@ -45,7 +47,7 @@ public class AuditLogService {
                     .oldValue(request.getOldValue())
                     .newValue(request.getNewValue())
                     .performedBy(performer)
-                    .performedByName(performer.getName())
+                    .performedByName(performerName)
                     .ipAddress(request.getIpAddress())
                     .build();
 

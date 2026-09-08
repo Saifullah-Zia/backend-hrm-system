@@ -30,15 +30,19 @@ public class NotificationService {
             Long referenceId
     ) {
 
-        Notification notification = new Notification();
+        try {
+            Notification notification = new Notification();
 
-        notification.setUserId(userId);
-        notification.setMessage(message);
-        notification.setType(type);
-        notification.setCreatedBy(createdBy);
-        notification.setReferenceId(referenceId);
+            notification.setUserId(userId);
+            notification.setMessage(message);
+            notification.setType(type);
+            notification.setCreatedBy(createdBy != null ? createdBy : (userId != null ? userId : 1L));
+            notification.setReferenceId(referenceId);
 
-        notificationRepository.save(notification);
+            notificationRepository.save(notification);
+        } catch (Exception e) {
+            System.err.println("Warning: Failed to save notification for user " + userId + ": " + e.getMessage());
+        }
     }
 
     public List<NotificationDto> getNotificationsByUserId(Long userId) {

@@ -85,29 +85,20 @@ public class PayrollGenerationHelper {
             return false;
         }
 
-        // Look up or generate attendance summary with fallback
+        // Look up attendance summary or construct fallback
         AttendanceSummary attendanceSummary = attendanceSummaryRepository
                 .findByEmployeeIdAndPayrollPeriodId(employeeId, payrollPeriodId)
                 .orElseGet(() -> {
-                    try {
-                        attendanceService.generateAttendanceSummary(employeeId, payrollPeriodId);
-                    } catch (Exception e) {
-                        System.err.println("Warning: Failed to generate attendance summary for " + employeeId + ": " + e.getMessage());
-                    }
-                    return attendanceSummaryRepository
-                            .findByEmployeeIdAndPayrollPeriodId(employeeId, payrollPeriodId)
-                            .orElseGet(() -> {
-                                AttendanceSummary fallback = new AttendanceSummary();
-                                fallback.setEmployee(employee);
-                                fallback.setPayrollPeriod(payrollPeriod);
-                                fallback.setPresentDays(0);
-                                fallback.setLateDays(0);
-                                fallback.setPaidLeaveDays(0);
-                                fallback.setUnpaidLeaveDays(0);
-                                fallback.setAbsentDays(0);
-                                fallback.setWorkingDays(26);
-                                return fallback;
-                            });
+                    AttendanceSummary fallback = new AttendanceSummary();
+                    fallback.setEmployee(employee);
+                    fallback.setPayrollPeriod(payrollPeriod);
+                    fallback.setPresentDays(0);
+                    fallback.setLateDays(0);
+                    fallback.setPaidLeaveDays(0);
+                    fallback.setUnpaidLeaveDays(0);
+                    fallback.setAbsentDays(0);
+                    fallback.setWorkingDays(26);
+                    return fallback;
                 });
 
         double basicSalary = 0.0;
