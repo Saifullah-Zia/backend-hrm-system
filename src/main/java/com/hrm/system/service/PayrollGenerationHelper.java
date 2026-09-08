@@ -72,6 +72,12 @@ public class PayrollGenerationHelper {
         User employee = userRepository.findById(employeeId)
                 .orElseThrow(() -> new RuntimeException("Employee not found: " + employeeId));
 
+        // Skip non-EMPLOYEE users (ADMIN and SUPERADMIN should not get payroll generated)
+        if (employee.getRole() != Role.EMPLOYEE) {
+            System.out.println("ℹ User " + employeeId + " (" + employee.getRole() + ") is not Role.EMPLOYEE — skipping.");
+            return false;
+        }
+
         // Skip if payroll already exists for this employee + period
         Optional<Payroll> existing = payrollRepository.findByUserAndPayrollPeriod(employee, payrollPeriod);
         if (existing.isPresent()) {

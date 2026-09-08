@@ -172,10 +172,10 @@ public class PayRollService {
             throw new RuntimeException("Payroll period must be locked before generating payroll");
         }
 
-        // Get all eligible employees (EMPLOYEE and ADMIN roles)
+        // Get all active employees (Role.EMPLOYEE only — excluding ADMIN and SUPERADMIN)
         List<User> allUsers = userRepository.findAll();
         List<User> employees = allUsers.stream()
-                .filter(u -> u.getRole() != null && u.getRole() != Role.SUPERADMIN)
+                .filter(u -> u.getRole() != null && u.getRole() == Role.EMPLOYEE)
                 .collect(Collectors.toList());
 
         // Step 1: Generate attendance summaries for all active employees first

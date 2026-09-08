@@ -19,6 +19,7 @@ import org.springframework.security.core.Authentication;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.annotation.Propagation;
 import com.hrm.system.service.OfficeHoursService;
 
 import java.time.*;
@@ -564,7 +565,7 @@ public class AttendanceService {
 
     // ── Payroll Integration: Attendance Summary Generation ─────────────────────
 
-    @Transactional
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public AttendanceSummaryDto generateAttendanceSummary(Long employeeId, Long payrollPeriodId) {
         User employee = userRepository.findById(employeeId)
                 .orElseThrow(() -> new EntityNotFoundException("Employee not found: " + employeeId));
@@ -653,14 +654,13 @@ public class AttendanceService {
         return Month.JANUARY;
     }
 
-    @Transactional
     public void generateBulkAttendanceSummaries(Long payrollPeriodId) {
         PayrollPeriod payrollPeriod = payrollPeriodRepository.findById(payrollPeriodId)
                 .orElseThrow(() -> new EntityNotFoundException("Payroll period not found: " + payrollPeriodId));
 
-        // Get all employees (EMPLOYEE and ADMIN roles)
+        // Get all employees (Role.EMPLOYEE only — excluding ADMIN and SUPERADMIN)
         List<User> employees = userRepository.findAll().stream()
-                .filter(u -> u.getRole() != null && u.getRole() != Role.SUPERADMIN)
+                .filter(u -> u.getRole() != null && u.getRole() == Role.EMPLOYEE)
                 .collect(Collectors.toList());
 
         for (User employee : employees) {
