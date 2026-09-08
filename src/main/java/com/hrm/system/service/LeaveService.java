@@ -201,9 +201,13 @@ public class LeaveService {
         }
 
         // ── 10. Build response with updated remaining balance ─────────────────
-        int remaining = leaveBalanceService
-                .getBalance(user.getId(), leaveType)
-                .getRemainingDays();
+        Integer remaining = null;
+        if (!leaveType.equalsIgnoreCase("UNPAID")) {
+            remaining = leaveBalanceService
+                    .getBalance(user.getId(), leaveType)
+                    .getRemainingDays();
+        }
+
 
         LeaveDto response = mapToDto(saved);
         response.setRemainingDaysAfterRequest(remaining);

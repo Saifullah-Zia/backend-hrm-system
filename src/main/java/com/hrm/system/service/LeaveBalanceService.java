@@ -114,6 +114,21 @@ public class LeaveBalanceService {
     // ─── Get a specific balance for user + leaveType + current year ───────────
     @Transactional(readOnly = true)
     public LeaveBalanceDto getBalance(Long userId, String leaveType) {
+        if ("UNPAID".equalsIgnoreCase(leaveType)) {
+            User user = userRepository.findById(userId)
+                    .orElseThrow(() -> new RuntimeException("User not found: " + userId));
+            return LeaveBalanceDto.builder()
+                    .userId(user.getId())
+                    .userName(user.getName())
+                    .leaveType("UNPAID")
+                    .year(LocalDate.now().getYear())
+                    .totalDays(999)
+                    .usedDays(0)
+                    .pendingDays(0)
+                    .remainingDays(999)
+                    .carryForwardDays(0)
+                    .build();
+        }
         int year = LocalDate.now().getYear();
         LeaveBalance balance = leaveBalanceRepository
                 .findByUserIdAndLeaveTypeAndYear(userId, leaveType.toUpperCase(), year)
@@ -125,6 +140,7 @@ public class LeaveBalanceService {
     // ─── Validation helper ────────────────────────────────────────────────────
     @Transactional(readOnly = true)
     public void validateSufficientBalance(Long userId, String leaveType, int requestedDays) {
+        if ("UNPAID".equalsIgnoreCase(leaveType)) return;
         int year = LocalDate.now().getYear();
         LeaveBalance balance = leaveBalanceRepository
                 .findByUserIdAndLeaveTypeAndYear(userId, leaveType.toUpperCase(), year)
@@ -150,6 +166,7 @@ public class LeaveBalanceService {
     // ─── Reserve pending days on APPLY ────────────────────────────────────────
     @Transactional
     public void reservePendingDays(Long userId, String leaveType, int days) {
+        if ("UNPAID".equalsIgnoreCase(leaveType)) return;
         int year = LocalDate.now().getYear();
         leaveBalanceRepository.incrementPendingDays(userId, leaveType.toUpperCase(), year, days);
     }
@@ -157,6 +174,7 @@ public class LeaveBalanceService {
     // ─── Convert pending → used on APPROVE ───────────────────────────────────
     @Transactional
     public void convertPendingToUsed(Long userId, String leaveType, int days) {
+        if ("UNPAID".equalsIgnoreCase(leaveType)) return;
         int year = LocalDate.now().getYear();
         leaveBalanceRepository.decrementPendingDays(userId, leaveType.toUpperCase(), year, days);
         leaveBalanceRepository.incrementUsedDays(userId, leaveType.toUpperCase(), year, days);
@@ -165,6 +183,7 @@ public class LeaveBalanceService {
     // ─── Release pending days on REJECT or CANCEL ─────────────────────────────
     @Transactional
     public void releasePendingDays(Long userId, String leaveType, int days) {
+        if ("UNPAID".equalsIgnoreCase(leaveType)) return;
         int year = LocalDate.now().getYear();
         leaveBalanceRepository.decrementPendingDays(userId, leaveType.toUpperCase(), year, days);
     }
@@ -172,6 +191,7 @@ public class LeaveBalanceService {
     // ─── Refund used days on APPROVED leave cancellation ─────────────────────
     @Transactional
     public void refundUsedDays(Long userId, String leaveType, int days) {
+        if ("UNPAID".equalsIgnoreCase(leaveType)) return;
         int year = LocalDate.now().getYear();
         leaveBalanceRepository.decrementUsedDays(userId, leaveType.toUpperCase(), year, days);
     }
