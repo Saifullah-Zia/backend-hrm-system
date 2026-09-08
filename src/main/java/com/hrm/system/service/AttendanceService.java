@@ -436,10 +436,12 @@ public class AttendanceService {
      *
      * Rules per employee per day (weekends skipped entirely):
      *  1. Real check-in exists → never touch it.
-     *  2. Approved leave overlaps this date → create/overwrite with ON_LEAVE
+     *  2. Holiday on this date → create/overwrite with HOLIDAY (unless a real
+     *     check-in exists — handled above).
+     *  3. Approved leave overlaps this date → create/overwrite with ON_LEAVE
      *     or UNPAID_LEAVE (matches the logic in createOrUpdateAttendanceForLeave).
-     *  3. No leave, no record → create ABSENT.
-     *  4. No leave, already ABSENT → no-op.
+     *  4. No holiday, no leave, no record → create ABSENT.
+     *  5. No holiday, no leave, already ABSENT → no-op.
      */
     @Transactional
     public ManualAttendanceResultDto markAttendanceForDateRange(LocalDate startDate, LocalDate endDate, List<Long> userIds) {
@@ -494,6 +496,28 @@ public class AttendanceService {
                     continue;
                 }
 
+                // Rule 2 (NEW): holiday overrides everything except a real check-in
+                // (already handled above). Overwrites an existing no-check-in
+                // placeholder (e.g. stale ABSENT) instead of no-op'ing on it.
+                if (holidayService.isHoliday(date)) {
+                    if (existing == null) {
+                        Attendance a = new Attendance();
+                        a.setUser(user);
+                        a.setDate(date);
+                        a.setStatus("HOLIDAY");
+                        attendanceRepository.save(a);
+                        created++;
+                    } else if (!"HOLIDAY".equals(existing.getStatus())) {
+                        existing.setStatus("HOLIDAY");
+                        attendanceRepository.save(existing);
+                        updatedToLeave++;
+                    } else {
+                        skippedHandled++;
+                    }
+                    date = date.plusDays(1);
+                    continue;
+                }
+
                 LocalDate finalDate = date;
                 Optional<Leave> matchingLeave = approvedLeaves.stream()
                         .filter(l -> l.getUser().getId().equals(user.getId())
@@ -527,7 +551,7 @@ public class AttendanceService {
                         attendanceRepository.save(a);
                         created++;
                     } else {
-                        skippedHandled++; // already ABSENT, no leave — no-op
+                        skippedHandled++; // already ABSENT, no leave, no holiday — no-op
                     }
                 }
 
@@ -682,10 +706,8 @@ public class AttendanceService {
         // for a shift that started yesterday evening is still yesterday's date.
         LocalDate shiftDate = LocalDate.now(AppTimeZone.PKT).minusDays(1);
 
-        // FIX: Skip weekends entirely — no shift is expected on Saturday/Sunday,
-        // so nobody should be marked ABSENT for those dates. This check was
-        // previously missing here (it only existed in markAttendanceForDateRange),
-        // which caused every employee to be wrongly marked ABSENT on weekends.
+        // Skip weekends entirely — no shift is expected on Saturday/Sunday,
+        // so nobody should be marked ABSENT (or HOLIDAY) for those dates.
         DayOfWeek dayOfWeek = shiftDate.getDayOfWeek();
         if (dayOfWeek == DayOfWeek.SATURDAY || dayOfWeek == DayOfWeek.SUNDAY) {
             System.out.println("Skipping absence marking for " + shiftDate + " (" + dayOfWeek + ") — weekend, no shift expected.");
@@ -697,11 +719,22 @@ public class AttendanceService {
                 .filter(u -> u.getRole() != Role.ADMIN && u.getRole() != Role.SUPERADMIN)
                 .collect(Collectors.toList());
 
+        // FIX: check the holiday once per run, and route every employee to
+        // markHolidayIfNoRecord (instead of markAbsentIfNoRecord) when the
+        // shift date is a declared holiday. Previously this method ignored
+        // holidayService entirely, so a "holiday" set in the HR dashboard
+        // never stopped everyone from being marked ABSENT overnight.
+        boolean holiday = holidayService.isHoliday(shiftDate);
+
         for (User user : allUsers) {
             try {
-                markAbsentIfNoRecord(user.getId(), shiftDate);
+                if (holiday) {
+                    markHolidayIfNoRecord(user.getId(), shiftDate);
+                } else {
+                    markAbsentIfNoRecord(user.getId(), shiftDate);
+                }
             } catch (Exception e) {
-                System.err.println("Failed to mark absent for user " + user.getId() + " on " + shiftDate);
+                System.err.println("Failed to mark attendance for user " + user.getId() + " on " + shiftDate);
                 e.printStackTrace();
             }
         }
