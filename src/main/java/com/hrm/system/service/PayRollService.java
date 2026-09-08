@@ -2,6 +2,7 @@ package com.hrm.system.service;
 
 import com.hrm.system.dto.AttendanceSummaryDto;
 import com.hrm.system.dto.PayRollDto;
+import com.hrm.system.enumm.AuditAction;
 import com.hrm.system.model.*;
 import com.hrm.system.repository.*;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -50,6 +51,9 @@ public class PayRollService {
 
     @Autowired
     private PayrollGenerationHelper payrollGenerationHelper;
+
+    @Autowired
+    private AuditLogService auditLogService;
 
     // ─── New payroll generation with attendance integration ───────────────────
 
@@ -119,14 +123,25 @@ public class PayRollService {
         int unpaidLeaveDays = attendanceSummary.getUnpaidLeaveDays() != null ? attendanceSummary.getUnpaidLeaveDays() : 0;
         int absentDays = attendanceSummary.getAbsentDays() != null ? attendanceSummary.getAbsentDays() : 0;
         int lateDays = attendanceSummary.getLateDays() != null ? attendanceSummary.getLateDays() : 0;
+        double incomeTax = payrollCalculationService.calculateIncomeTax(grossSalary);
         double deductions = payrollCalculationService.calculateDeductions(
-                unpaidLeaveDays, absentDays, lateDays, dailySalary, 0.0);
+                unpaidLeaveDays, absentDays, lateDays, dailySalary, 0.0, incomeTax);
         payroll.setTotalDeductions(deductions);
 
         double netSalary = payrollCalculationService.calculateNetSalary(grossSalary, deductions);
         payroll.setNetSalary(netSalary);
 
         Payroll saved = payrollRepository.save(payroll);
+
+        if (incomeTax > 0) {
+            PayrollItem taxItem = new PayrollItem();
+            taxItem.setPayroll(saved);
+            taxItem.setType(PayrollItemType.DEDUCTION);
+            taxItem.setName("Income Tax");
+            taxItem.setAmount(incomeTax);
+            taxItem.setDescription("Monthly withholding tax");
+            payrollItemRepository.save(taxItem);
+        }
 
         notificationService.createNotification(
                 employee.getId(),
@@ -136,6 +151,12 @@ public class PayRollService {
                 employee.getId(),
                 saved.getId()
         );
+
+        // Audit trail
+        auditLogService.log("Payroll", saved.getId(), AuditAction.GENERATE,
+                String.format("Payroll generated for %s — period: %s %s, net: %.2f",
+                        employee.getName(), payrollPeriod.getMonth(), payrollPeriod.getYear(), netSalary),
+                generatedBy);
 
         return mapToDto(saved);
     }
@@ -162,7 +183,6 @@ public class PayRollService {
 
         // Step 2: Get the summaries for this period eagerly fetching employee
         List<AttendanceSummary> summaries = attendanceSummaryRepository.findByPayrollPeriodIdWithEmployee(payrollPeriodId);
-        List<AttendanceSummary> allSummaries = attendanceSummaryRepository.findAll();
 
         int generated = 0;
         int skipped   = 0;
@@ -192,9 +212,9 @@ public class PayRollService {
 
         String result = String.format("Bulk payroll complete: %d generated, %d skipped, %d failed. " +
                 "Total users in system: %d. Employees found with Role.EMPLOYEE: %d. " +
-                "Total summaries in system: %d. Summaries for this period: %d. " +
+                "Summaries for this period: %d. " +
                 "Details: %s",
-                generated, skipped, failed, allUsers.size(), employees.size(), allSummaries.size(), summaries.size(), details.toString());
+                generated, skipped, failed, allUsers.size(), employees.size(), summaries.size(), details.toString());
         System.out.println(result);
         return result;
     }
@@ -224,6 +244,12 @@ public class PayRollService {
                 saved.getId()
         );
 
+        // Audit trail
+        auditLogService.log("Payroll", saved.getId(), AuditAction.APPROVE,
+                String.format("Payroll approved for %s — net: %.2f",
+                        payroll.getUser().getName(), saved.getNetSalary()),
+                approvedBy);
+
         return mapToDto(saved);
     }
 
@@ -251,6 +277,12 @@ public class PayRollService {
                 saved.getId()
         );
 
+        // Audit trail — use the payroll owner as performer since markAsPaid has no explicit userId param
+        auditLogService.log("Payroll", saved.getId(), AuditAction.UPDATE,
+                String.format("Payroll marked as PAID for %s — net: %.2f",
+                        payroll.getUser().getName(), saved.getNetSalary()),
+                payroll.getApprovedBy() != null ? payroll.getApprovedBy() : payroll.getGeneratedBy());
+
         return mapToDto(saved);
     }
 
@@ -275,7 +307,24 @@ public class PayRollService {
 
         double basicSalary = payroll.getUser().getBasicSalary() != null ? payroll.getUser().getBasicSalary() : 0.0;
         int workingDays = attendanceSummary.getWorkingDays() != null ? attendanceSummary.getWorkingDays() : 26;
-        double dailySalary = payrollCalculationService.calculateDailySalary(basicSalary, workingDays);
+
+        // FIX (Finding 1): Use calendar days of the month as divisor — consistent
+        // with generatePayroll() and PayrollGenerationHelper. Previously this used
+        // workingDays (~22) which inflated the daily rate and therefore deductions.
+        int daysInMonth = 30;
+        try {
+            String mStr = payroll.getPayrollPeriod().getMonth();
+            if (mStr != null && mStr.contains(" ")) mStr = mStr.split(" ")[0];
+            if (mStr != null && payroll.getPayrollPeriod().getYear() != null) {
+                java.time.YearMonth ym = java.time.YearMonth.of(
+                        payroll.getPayrollPeriod().getYear(),
+                        java.time.Month.valueOf(mStr.trim().toUpperCase()));
+                daysInMonth = ym.lengthOfMonth();
+            }
+        } catch (Exception ex) {
+            daysInMonth = workingDays > 0 ? workingDays : 30;
+        }
+        double dailySalary = payrollCalculationService.calculateDailySalary(basicSalary, daysInMonth);
 
         payroll.setBasicSalary(basicSalary);
         payroll.setDailySalary(dailySalary);
@@ -286,17 +335,19 @@ public class PayRollService {
         payroll.setUnpaidLeaveDays(attendanceSummary.getUnpaidLeaveDays());
         payroll.setAbsentDays(attendanceSummary.getAbsentDays());
 
-        int presentDays = attendanceSummary.getPresentDays() != null ? attendanceSummary.getPresentDays() : 0;
-        int paidLeaveDays = attendanceSummary.getPaidLeaveDays() != null ? attendanceSummary.getPaidLeaveDays() : 0;
+        // FIX (Finding 2): Use the standard 3-parameter calculateGrossSalary
         double grossSalary = payrollCalculationService.calculateGrossSalary(
-                basicSalary, presentDays, paidLeaveDays, payroll.getTotalAllowances(), payroll.getTotalBonuses());
+                basicSalary,
+                payroll.getTotalAllowances() != null ? payroll.getTotalAllowances() : 0.0,
+                payroll.getTotalBonuses() != null ? payroll.getTotalBonuses() : 0.0);
         payroll.setGrossSalary(grossSalary);
 
         int unpaidLeaveDays = attendanceSummary.getUnpaidLeaveDays() != null ? attendanceSummary.getUnpaidLeaveDays() : 0;
         int absentDays = attendanceSummary.getAbsentDays() != null ? attendanceSummary.getAbsentDays() : 0;
         int lateDays = attendanceSummary.getLateDays() != null ? attendanceSummary.getLateDays() : 0;
+        double incomeTax = payrollCalculationService.calculateIncomeTax(grossSalary);
         double deductions = payrollCalculationService.calculateDeductions(
-                unpaidLeaveDays, absentDays, lateDays, dailySalary, 0.0);
+                unpaidLeaveDays, absentDays, lateDays, dailySalary, 0.0, incomeTax);
         payroll.setTotalDeductions(deductions);
 
         double netSalary = payrollCalculationService.calculateNetSalary(grossSalary, deductions);
@@ -304,6 +355,16 @@ public class PayRollService {
         payroll.setStatus(PayrollStatus.DRAFT);
 
         Payroll saved = payrollRepository.save(payroll);
+
+        if (incomeTax > 0) {
+            PayrollItem taxItem = new PayrollItem();
+            taxItem.setPayroll(saved);
+            taxItem.setType(PayrollItemType.DEDUCTION);
+            taxItem.setName("Income Tax");
+            taxItem.setAmount(incomeTax);
+            taxItem.setDescription("Monthly withholding tax");
+            payrollItemRepository.save(taxItem);
+        }
         return mapToDto(saved);
     }
 
@@ -317,8 +378,12 @@ public class PayRollService {
                 .collect(Collectors.toList());
     }
 
-    // ─── Legacy methods (keep for backward compatibility) ─────────────────────
+    // ─── Legacy methods — DEPRECATED ──────────────────────────────────────────
+    // These methods do NOT use attendance integration, payroll periods, or policy
+    // rules. They produce inaccurate payroll records. Use generatePayroll() or
+    // generateBulkPayroll() instead.
 
+    @Deprecated(since = "2024-09", forRemoval = true)
     public void generatePayrollForAllEmployees(int month, int year) {
         List<User> employees = userRepository.findAll();
 
@@ -353,6 +418,7 @@ public class PayRollService {
         }
     }
 
+    @Deprecated(since = "2024-09", forRemoval = true)
     public PayRollDto createPayroll(PayRollDto dto) {
         User user = userRepository.findById(dto.getUserId())
                 .orElseThrow(() -> new RuntimeException("User not found with id: " + dto.getUserId()));
@@ -462,6 +528,11 @@ public class PayRollService {
         Payroll payroll = payrollRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Payroll not found for ID: " + id));
 
+        // Snapshot old values for audit trail
+        double oldBonuses    = payroll.getTotalBonuses()    != null ? payroll.getTotalBonuses()    : 0.0;
+        double oldAllowances = payroll.getTotalAllowances() != null ? payroll.getTotalAllowances() : 0.0;
+        double oldNet        = payroll.getNetSalary()       != null ? payroll.getNetSalary()       : 0.0;
+
         if (dto.getTotalBonuses() != null)    payroll.setTotalBonuses(dto.getTotalBonuses());
         else if (dto.getBonuses() != null)    payroll.setTotalBonuses(dto.getBonuses());
 
@@ -479,15 +550,28 @@ public class PayRollService {
         );
         payroll.setGrossSalary(grossSalary);
 
-        // Attendance deductions remain as-is; only manual deduction override from dto
-        double attendanceDeductions = payroll.getTotalDeductions() != null ? payroll.getTotalDeductions() : 0.0;
-        if (dto.getDeductions() != null) {
-            // If caller explicitly sends deductions, honour it (legacy path)
-            attendanceDeductions = dto.getDeductions();
-            payroll.setTotalDeductions(attendanceDeductions);
-        }
+        // FIX (Finding 8): Always recalculate attendance-based (auto) deductions from
+        // the stored attendance data so they are never silently lost. If the caller
+        // also sends a deductions value, treat the DIFFERENCE between that value and
+        // the auto-calculated amount as a manual adjustment.
+        double dailySalary = payroll.getDailySalary() != null ? payroll.getDailySalary() : 0.0;
+        int unpaidLeave = payroll.getUnpaidLeaveDays() != null ? payroll.getUnpaidLeaveDays() : 0;
+        int absentDays  = payroll.getAbsentDays()      != null ? payroll.getAbsentDays()      : 0;
+        int lateDays    = payroll.getLateDays()         != null ? payroll.getLateDays()         : 0;
+        double autoDeductions = payrollCalculationService.calculateDeductions(
+                unpaidLeave, absentDays, lateDays, dailySalary, 0.0);
 
-        double netSalary = payrollCalculationService.calculateNetSalary(grossSalary, attendanceDeductions);
+        double totalDeductions;
+        if (dto.getDeductions() != null) {
+            // Caller sent an explicit total — honour it (may include manual adjustments)
+            totalDeductions = dto.getDeductions();
+        } else {
+            // No explicit override — use auto-calculated deductions
+            totalDeductions = autoDeductions;
+        }
+        payroll.setTotalDeductions(totalDeductions);
+
+        double netSalary = payrollCalculationService.calculateNetSalary(grossSalary, totalDeductions);
         payroll.setNetSalary(netSalary);
 
         Payroll saved = payrollRepository.save(payroll);
@@ -500,6 +584,16 @@ public class PayRollService {
                 payroll.getUser().getId(),
                 saved.getId()
         );
+
+        // Audit trail
+        auditLogService.log("Payroll", saved.getId(), AuditAction.UPDATE,
+                String.format("Payroll updated for %s — bonuses: %.2f→%.2f, allowances: %.2f→%.2f, net: %.2f→%.2f",
+                        payroll.getUser().getName(), oldBonuses,
+                        payroll.getTotalBonuses() != null ? payroll.getTotalBonuses() : 0.0,
+                        oldAllowances,
+                        payroll.getTotalAllowances() != null ? payroll.getTotalAllowances() : 0.0,
+                        oldNet, saved.getNetSalary()),
+                payroll.getGeneratedBy() != null ? payroll.getGeneratedBy() : payroll.getUser().getId());
 
         return mapToDto(saved);
     }

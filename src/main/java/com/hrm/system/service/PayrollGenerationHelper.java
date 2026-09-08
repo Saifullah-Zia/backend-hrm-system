@@ -1,6 +1,7 @@
 package com.hrm.system.service;
 
 import com.hrm.system.model.*;
+import com.hrm.system.enumm.AuditAction;
 import com.hrm.system.repository.*;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -46,6 +47,12 @@ public class PayrollGenerationHelper {
 
     @Autowired
     private NotificationService notificationService;
+
+    @Autowired
+    private AuditLogService auditLogService;
+
+    @Autowired
+    private PayrollItemRepository payrollItemRepository;
 
     /**
      * Generate payroll for a single employee inside a BRAND NEW transaction.
@@ -103,7 +110,8 @@ public class PayrollGenerationHelper {
         int    lateDays      = attendanceSummary.getLateDays()       != null ? attendanceSummary.getLateDays()       : 0;
 
         double grossSalary = payrollCalculationService.calculateGrossSalary(basicSalary, 0.0, 0.0);
-        double deductions  = payrollCalculationService.calculateDeductions(unpaidLeave, absentDays, lateDays, dailySalary, 0.0);
+        double incomeTax   = payrollCalculationService.calculateIncomeTax(grossSalary);
+        double deductions  = payrollCalculationService.calculateDeductions(unpaidLeave, absentDays, lateDays, dailySalary, 0.0, incomeTax);
         double netSalary   = payrollCalculationService.calculateNetSalary(grossSalary, deductions);
 
         Payroll payroll = new Payroll();
@@ -128,6 +136,16 @@ public class PayrollGenerationHelper {
 
         Payroll saved = payrollRepository.save(payroll);
 
+        if (incomeTax > 0) {
+            PayrollItem taxItem = new PayrollItem();
+            taxItem.setPayroll(saved);
+            taxItem.setType(PayrollItemType.DEDUCTION);
+            taxItem.setName("Income Tax");
+            taxItem.setAmount(incomeTax);
+            taxItem.setDescription("Monthly withholding tax");
+            payrollItemRepository.save(taxItem);
+        }
+
         notificationService.createNotification(
                 employee.getId(),
                 String.format("💰 Your payroll for %s %s has been generated. Net salary: %.2f",
@@ -138,6 +156,13 @@ public class PayrollGenerationHelper {
         );
 
         System.out.println("✓ Payroll generated for employee " + employeeId + " — net: " + netSalary);
+
+        // Audit trail
+        auditLogService.log("Payroll", saved.getId(), AuditAction.GENERATE,
+                String.format("Bulk payroll generated for %s — period: %s %s, net: %.2f",
+                        employee.getName(), payrollPeriod.getMonth(), payrollPeriod.getYear(), netSalary),
+                generatedBy);
+
         return true;
     }
 }

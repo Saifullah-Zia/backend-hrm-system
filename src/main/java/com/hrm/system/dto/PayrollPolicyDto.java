@@ -14,6 +14,7 @@ public class PayrollPolicyDto {
     private String lateDeductionRule;
     private String unpaidLeaveDeductionRule;
     private String absentDeductionRule;
+    private String incomeTaxRule;
     private Boolean isActive;
     private String description;
     private LocalDateTime createdAt;

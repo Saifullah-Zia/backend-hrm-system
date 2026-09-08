@@ -34,6 +34,7 @@ public class PayrollPolicyService {
         policy.setLateDeductionRule(dto.getLateDeductionRule());
         policy.setUnpaidLeaveDeductionRule(dto.getUnpaidLeaveDeductionRule());
         policy.setAbsentDeductionRule(dto.getAbsentDeductionRule());
+        policy.setIncomeTaxRule(dto.getIncomeTaxRule());
         policy.setIsActive(true);
         policy.setDescription(dto.getDescription());
 
@@ -49,6 +50,7 @@ public class PayrollPolicyService {
         policy.setLateDeductionRule(dto.getLateDeductionRule());
         policy.setUnpaidLeaveDeductionRule(dto.getUnpaidLeaveDeductionRule());
         policy.setAbsentDeductionRule(dto.getAbsentDeductionRule());
+        policy.setIncomeTaxRule(dto.getIncomeTaxRule());
         policy.setIsActive(dto.getIsActive());
         policy.setDescription(dto.getDescription());
 
@@ -89,6 +91,7 @@ public class PayrollPolicyService {
         dto.setLateDeductionRule(policy.getLateDeductionRule());
         dto.setUnpaidLeaveDeductionRule(policy.getUnpaidLeaveDeductionRule());
         dto.setAbsentDeductionRule(policy.getAbsentDeductionRule());
+        dto.setIncomeTaxRule(policy.getIncomeTaxRule());
         dto.setIsActive(policy.getIsActive());
         dto.setDescription(policy.getDescription());
         dto.setCreatedAt(policy.getCreatedAt());

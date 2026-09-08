@@ -139,6 +139,25 @@ public class PayslipService {
         html.append("<p><span class=\"label\">Total Allowances:</span><span class=\"value\">PKR ").append(String.format("%.2f", data.get("totalAllowances"))).append("</span></p>\n");
         html.append("<p><span class=\"label\">Total Bonuses:</span><span class=\"value\">PKR ").append(String.format("%.2f", data.get("totalBonuses"))).append("</span></p>\n");
         html.append("<p><span class=\"label\">Total Deductions:</span><span class=\"value\">PKR ").append(String.format("%.2f", data.get("totalDeductions"))).append("</span></p>\n");
+        
+        List<PayrollItem> items = (List<PayrollItem>) data.get("items");
+        if (items != null && !items.isEmpty()) {
+            html.append("<div style=\"margin-top:10px; margin-bottom:10px;\">\n");
+            html.append("<p><span class=\"label\">Itemized Adjustments & Tax Withholding:</span></p>\n");
+            html.append("<table>\n");
+            html.append("<tr><th>Item Name</th><th>Type</th><th>Amount</th><th>Description</th></tr>\n");
+            for (PayrollItem item : items) {
+                html.append("<tr>")
+                    .append("<td>").append(item.getName()).append("</td>")
+                    .append("<td>").append(item.getType()).append("</td>")
+                    .append("<td>PKR ").append(String.format("%.2f", item.getAmount())).append("</td>")
+                    .append("<td>").append(item.getDescription() != null ? item.getDescription() : "").append("</td>")
+                    .append("</tr>\n");
+            }
+            html.append("</table>\n");
+            html.append("</div>\n");
+        }
+
         html.append("<p class=\"total\"><span class=\"label\">Gross Salary:</span><span class=\"value\">PKR ").append(String.format("%.2f", data.get("grossSalary"))).append("</span></p>\n");
         html.append("<p class=\"total\"><span class=\"label\">Net Salary:</span><span class=\"value\">PKR ").append(String.format("%.2f", data.get("netSalary"))).append("</span></p>\n");
         html.append("</div>\n");
@@ -230,6 +249,15 @@ public class PayslipService {
             Cell deductionCell = createCell("- PKR " + String.format("%.2f", data.get("totalDeductions")), font);
             deductionCell.setFontColor(ColorConstants.RED);
             salaryTable.addCell(deductionCell);
+
+            List<PayrollItem> pdfItems = (List<PayrollItem>) data.get("items");
+            if (pdfItems != null && !pdfItems.isEmpty()) {
+                for (PayrollItem item : pdfItems) {
+                    salaryTable.addCell(createCell("  • " + item.getName() + " (" + item.getType() + "):", font));
+                    salaryTable.addCell(createCell("PKR " + String.format("%.2f", item.getAmount()), font));
+                }
+            }
+
             salaryTable.addCell(createCell("Gross Salary:", boldFont));
             salaryTable.addCell(createCell("PKR " + String.format("%.2f", data.get("grossSalary")), boldFont));
             salaryTable.addCell(createCell("Net Salary:", boldFont));

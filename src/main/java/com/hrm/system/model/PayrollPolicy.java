@@ -33,6 +33,9 @@ public class PayrollPolicy {
     @Column(name = "absent_deduction_rule", columnDefinition = "TEXT")
     private String absentDeductionRule;
 
+    @Column(name = "income_tax_rule", columnDefinition = "TEXT")
+    private String incomeTaxRule;
+
     @Column(name = "is_active", nullable = false)
     private Boolean isActive = true;
 

@@ -9,6 +9,7 @@ public enum AuditAction {
     WITHDRAW,
     SUBMIT,
     COMPLETE,
+    GENERATE,
     LOGIN,
     LOGOUT
 }
