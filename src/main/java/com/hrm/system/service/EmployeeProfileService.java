@@ -171,7 +171,7 @@ public class EmployeeProfileService {
 
         String email = ((UserDetails) auth.getPrincipal()).getUsername();
 
-        User user = userRepository.findByEmail(email)
+        User user = userRepository.findByEmailIgnoreCase(email != null ? email.trim() : "")
                 .orElseThrow(() -> new ResponseStatusException(
                         HttpStatus.UNAUTHORIZED, "User not found"));
 

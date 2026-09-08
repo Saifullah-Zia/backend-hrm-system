@@ -16,6 +16,7 @@ import java.util.Optional;
 public interface UserRepository extends JpaRepository<User, Long> {
 
     Optional<User> findByEmail(String email);
+    Optional<User> findByEmailIgnoreCase(String email);
     Optional<User> findByName(String name);
     List<User> findByRole(Role role);
     List<User> findByProbationStatus(ProbationStatus probationStatus);
@@ -30,7 +31,7 @@ public interface UserRepository extends JpaRepository<User, Long> {
         UPDATE User u
         SET u.presenceStatus = :status,
             u.lastSeenAt = :lastSeen
-        WHERE u.email = :email
+        WHERE LOWER(u.email) = LOWER(:email)
     """)
     void updatePresenceStatus(
             @Param("email") String email,

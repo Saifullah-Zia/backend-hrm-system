@@ -46,6 +46,9 @@ public class UserService implements UserDetailsService {
     private AuditLogRepository auditLogRepository;
 
     public UserDTO createUser(User user) {
+        if (user.getEmail() != null) {
+            user.setEmail(user.getEmail().trim().toLowerCase());
+        }
         user.setPassword(passwordEncoder.encode(user.getPassword()));
         User savedUser = userRepository.save(user);
         leaveBalanceService.initializeBalancesForUser(savedUser, LocalDate.now().getYear());
@@ -67,7 +70,8 @@ public class UserService implements UserDetailsService {
     }
 
     public UserDTO getUserByEmail(String email) {
-        User user = userRepository.findByEmail(email)
+        String cleanEmail = email != null ? email.trim() : "";
+        User user = userRepository.findByEmailIgnoreCase(cleanEmail)
                 .orElseThrow(() -> new RuntimeException("User not found with email " + email));
         return convertToDTO(user);
     }
@@ -77,7 +81,9 @@ public class UserService implements UserDetailsService {
                 .orElseThrow(() -> new RuntimeException("User not found with ID " + id));
 
         existingUser.setName(userDetails.getName());
-        existingUser.setEmail(userDetails.getEmail());
+        if (userDetails.getEmail() != null) {
+            existingUser.setEmail(userDetails.getEmail().trim().toLowerCase());
+        }
 
         if (userDetails.getPassword() != null && !userDetails.getPassword().isEmpty()) {
             existingUser.setPassword(passwordEncoder.encode(userDetails.getPassword()));
@@ -95,7 +101,7 @@ public class UserService implements UserDetailsService {
             existingUser.setName(name.trim());
         }
         if (email != null && !email.isBlank()) {
-            existingUser.setEmail(email.trim());
+            existingUser.setEmail(email.trim().toLowerCase());
         }
 
         return convertToDTO(userRepository.save(existingUser));
@@ -172,11 +178,12 @@ public class UserService implements UserDetailsService {
 
     @Override
     public UserDetails loadUserByUsername(String username) throws UsernameNotFoundException {
-        // JWT subject is name — try name first, then email as fallback
-        User user = userRepository.findByName(username)
-                .orElseGet(() -> userRepository.findByEmail(username)
+        String cleanUsername = username != null ? username.trim() : "";
+        // JWT subject is name — try name first, then email (case-insensitive) as fallback
+        User user = userRepository.findByName(cleanUsername)
+                .orElseGet(() -> userRepository.findByEmailIgnoreCase(cleanUsername)
                         .orElseThrow(() -> new UsernameNotFoundException(
-                                "User not found: " + username)));
+                                "User not found: " + cleanUsername)));
 
         return new com.hrm.system.security.CustomUserDetails(user);
     }

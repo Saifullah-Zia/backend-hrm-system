@@ -47,7 +47,8 @@ public class AuthService {
     }
 
     public User authenticate(String email, String password, String clientIp) {
-        User user = userRepository.findByEmail(email)
+        String cleanEmail = email != null ? email.trim() : "";
+        User user = userRepository.findByEmailIgnoreCase(cleanEmail)
                 .orElseThrow(() -> new RuntimeException("User not found"));
 
         if (!passwordEncoder.matches(password, user.getPassword())) {
@@ -65,7 +66,7 @@ public class AuthService {
         if (!isPrivileged && !isRemoteAllowed) {
             boolean isOffice = com.hrm.system.util.IpUtil.isAllowedIp(clientIp, allowedOfficeIps, allowLocalhost);
             if (!isOffice) {
-                log.warn("Blocked login for employee {} from IP {} (outside Office Wi-Fi)", email, clientIp);
+                log.warn("Blocked login for employee {} from IP {} (outside Office Wi-Fi)", cleanEmail, clientIp);
                 throw new RuntimeException("HRM login is restricted to Office Wi-Fi. Please connect to Office Wi-Fi or request remote access from HR.");
             }
         }
@@ -75,7 +76,10 @@ public class AuthService {
 
     // ── REGISTER ───────────────────────────────────────────────────────────
     public String register(User user) {
-        Optional<User> existing = userRepository.findByEmail(user.getEmail());
+        if (user.getEmail() != null) {
+            user.setEmail(user.getEmail().trim().toLowerCase());
+        }
+        Optional<User> existing = userRepository.findByEmailIgnoreCase(user.getEmail());
 
         if (existing.isPresent()) {
             if (!existing.get().isEnabled()) {
@@ -105,15 +109,14 @@ public class AuthService {
         user.setVerificationExpiry(LocalDateTime.now().plusMinutes(10));
         userRepository.save(user);
 
-        userRepository.save(user);
         emailService.sendOtp(user.getEmail(), "Verify your account", Integer.parseInt(otp));
         return "Registration successful. Please check your email for the verification code.";
-
     }
 
     // ── VERIFY EMAIL ───────────────────────────────────────────────────────
     public String verifyEmail(String email, String otp) {
-        User user = userRepository.findByEmail(email)
+        String cleanEmail = email != null ? email.trim() : "";
+        User user = userRepository.findByEmailIgnoreCase(cleanEmail)
                 .orElseThrow(() -> new RuntimeException("User not found"));
 
         if (user.isEnabled()) {
@@ -141,7 +144,8 @@ public class AuthService {
 
     // ── RESEND OTP ─────────────────────────────────────────────────────────
     public String resendVerificationOtp(String email) {
-        User user = userRepository.findByEmail(email)
+        String cleanEmail = email != null ? email.trim() : "";
+        User user = userRepository.findByEmailIgnoreCase(cleanEmail)
                 .orElseThrow(() -> new RuntimeException("User not found"));
 
         if (user.isEnabled()) {
@@ -153,13 +157,14 @@ public class AuthService {
         user.setVerificationExpiry(LocalDateTime.now().plusMinutes(10));
         userRepository.save(user);
 
-        emailService.sendOtp(email, "Verify your account", Integer.parseInt(otp));
+        emailService.sendOtp(cleanEmail, "Verify your account", Integer.parseInt(otp));
         return "Verification code resent. Please check your email.";
     }
 
     // ── FORGOT PASSWORD ────────────────────────────────────────────────────
     public String forgotPassword(String email) {
-        User user = userRepository.findByEmail(email)
+        String cleanEmail = email != null ? email.trim() : "";
+        User user = userRepository.findByEmailIgnoreCase(cleanEmail)
                 .orElseThrow(() -> new RuntimeException("No account found with that email."));
 
         String otp = generateOtp();
@@ -167,13 +172,14 @@ public class AuthService {
         user.setResetPasswordExpiry(LocalDateTime.now().plusMinutes(10));
         userRepository.save(user);
 
-        emailService.sendOtp(email, "Reset your password", Integer.parseInt(otp));
+        emailService.sendOtp(cleanEmail, "Reset your password", Integer.parseInt(otp));
         return "Password reset code sent to your email.";
     }
 
     // ── RESET PASSWORD ─────────────────────────────────────────────────────
     public String resetPassword(String email, String otp, String newPassword) {
-        User user = userRepository.findByEmail(email)
+        String cleanEmail = email != null ? email.trim() : "";
+        User user = userRepository.findByEmailIgnoreCase(cleanEmail)
                 .orElseThrow(() -> new RuntimeException("User not found"));
 
         if (!otp.equals(user.getResetPasswordCode())) {
