@@ -37,6 +37,7 @@ public class AttendanceService {
     private final PayrollPeriodRepository payrollPeriodRepository;
     private final LeaveRepository      leaveRepository;
     private final LeaveBalanceService  leaveBalanceService;
+    private final HolidayService       holidayService;
 
     public AttendanceService(AttendanceRepository attendanceRepository,
                              UserRepository userRepository,
@@ -44,7 +45,8 @@ public class AttendanceService {
                              AttendanceSummaryRepository attendanceSummaryRepository,
                              PayrollPeriodRepository payrollPeriodRepository,
                              LeaveRepository leaveRepository,
-                             LeaveBalanceService leaveBalanceService) {
+                             LeaveBalanceService leaveBalanceService,
+                             HolidayService holidayService) {
         this.attendanceRepository = attendanceRepository;
         this.userRepository       = userRepository;
         this.officeHoursService   = officeHoursService;
@@ -52,6 +54,7 @@ public class AttendanceService {
         this.payrollPeriodRepository = payrollPeriodRepository;
         this.leaveRepository      = leaveRepository;
         this.leaveBalanceService  = leaveBalanceService;
+        this.holidayService       = holidayService;
     }
 
     // ── Admin: manual record creation ────────────────────────────────────────
@@ -382,6 +385,25 @@ public class AttendanceService {
         attendance.setUser(user);
         attendance.setDate(date);
         attendance.setStatus(status);
+        attendanceRepository.save(attendance);
+    }
+
+    @Transactional
+    public void markHolidayIfNoRecord(Long userId, LocalDate date) {
+        // Only mark holiday if no attendance record exists
+        Optional<Attendance> existing = attendanceRepository.findByUserIdAndDate(userId, date);
+        if (existing.isPresent()) {
+            // Don't override existing record (check-in or leave)
+            return;
+        }
+
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new EntityNotFoundException("User not found: " + userId));
+
+        Attendance attendance = new Attendance();
+        attendance.setUser(user);
+        attendance.setDate(date);
+        attendance.setStatus("HOLIDAY");
         attendanceRepository.save(attendance);
     }
 
