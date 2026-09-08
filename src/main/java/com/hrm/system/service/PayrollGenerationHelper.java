@@ -76,27 +76,44 @@ public class PayrollGenerationHelper {
             return false;
         }
 
-        // Look up or generate attendance summary
+        // Look up or generate attendance summary with fallback
         AttendanceSummary attendanceSummary = attendanceSummaryRepository
                 .findByEmployeeIdAndPayrollPeriodId(employeeId, payrollPeriodId)
                 .orElseGet(() -> {
-                    attendanceService.generateAttendanceSummary(employeeId, payrollPeriodId);
+                    try {
+                        attendanceService.generateAttendanceSummary(employeeId, payrollPeriodId);
+                    } catch (Exception e) {
+                        System.err.println("Warning: Failed to generate attendance summary for " + employeeId + ": " + e.getMessage());
+                    }
                     return attendanceSummaryRepository
                             .findByEmployeeIdAndPayrollPeriodId(employeeId, payrollPeriodId)
-                            .orElseThrow(() -> new RuntimeException(
-                                    "Failed to generate attendance summary for employee: " + employeeId));
+                            .orElseGet(() -> {
+                                AttendanceSummary fallback = new AttendanceSummary();
+                                fallback.setEmployee(employee);
+                                fallback.setPayrollPeriod(payrollPeriod);
+                                fallback.setPresentDays(0);
+                                fallback.setLateDays(0);
+                                fallback.setPaidLeaveDays(0);
+                                fallback.setUnpaidLeaveDays(0);
+                                fallback.setAbsentDays(0);
+                                fallback.setWorkingDays(26);
+                                return fallback;
+                            });
                 });
 
         double basicSalary   = employee.getBasicSalary() != null ? employee.getBasicSalary() : 0.0;
-        int    workingDays   = attendanceSummary.getWorkingDays()    != null ? attendanceSummary.getWorkingDays()    : 26;
+        int    workingDays   = attendanceSummary.getWorkingDays() != null ? attendanceSummary.getWorkingDays() : 26;
         
         int daysInMonth = 30;
         try {
             String mStr = payrollPeriod.getMonth();
             if (mStr != null && mStr.contains(" ")) mStr = mStr.split(" ")[0];
             if (mStr != null && payrollPeriod.getYear() != null) {
-                java.time.YearMonth ym = java.time.YearMonth.of(payrollPeriod.getYear(), java.time.Month.valueOf(mStr.trim().toUpperCase()));
-                daysInMonth = ym.lengthOfMonth();
+                String cleanMonth = mStr.trim().toUpperCase();
+                if (cleanMonth.length() > 3) {
+                    java.time.YearMonth ym = java.time.YearMonth.of(payrollPeriod.getYear(), java.time.Month.valueOf(cleanMonth));
+                    daysInMonth = ym.lengthOfMonth();
+                }
             }
         } catch (Exception e) {
             daysInMonth = workingDays > 0 ? workingDays : 30;

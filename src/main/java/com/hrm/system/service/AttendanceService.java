@@ -574,14 +574,10 @@ public class AttendanceService {
 
         // Parse month and year to get date range
         String month = payrollPeriod.getMonth();
-        Integer year = payrollPeriod.getYear();
+        Integer year = payrollPeriod.getYear() != null ? payrollPeriod.getYear() : LocalDate.now().getYear();
 
-        // Get first and last day of the month
-        String monthStr = month;
-        if (monthStr != null && monthStr.contains(" ")) {
-            monthStr = monthStr.split(" ")[0];
-        }
-        YearMonth yearMonth = YearMonth.of(year, Month.valueOf(monthStr != null ? monthStr.trim().toUpperCase() : ""));
+        Month monthEnum = parseMonth(month);
+        YearMonth yearMonth = YearMonth.of(year, monthEnum);
         LocalDate startDate = yearMonth.atDay(1);
         LocalDate endDate = yearMonth.atEndOfMonth();
 
@@ -630,14 +626,41 @@ public class AttendanceService {
         return mapToAttendanceSummaryDto(saved);
     }
 
+    private Month parseMonth(String monthStr) {
+        if (monthStr == null || monthStr.trim().isEmpty()) {
+            return Month.JANUARY;
+        }
+        String clean = monthStr.trim();
+        if (clean.contains(" ")) {
+            clean = clean.split(" ")[0].trim();
+        }
+        clean = clean.toUpperCase();
+
+        try {
+            return Month.valueOf(clean);
+        } catch (Exception ignored) {}
+
+        try {
+            int m = Integer.parseInt(clean);
+            if (m >= 1 && m <= 12) return Month.of(m);
+        } catch (Exception ignored) {}
+
+        for (Month m : Month.values()) {
+            if (m.name().startsWith(clean) || clean.startsWith(m.name().substring(0, 3))) {
+                return m;
+            }
+        }
+        return Month.JANUARY;
+    }
+
     @Transactional
     public void generateBulkAttendanceSummaries(Long payrollPeriodId) {
         PayrollPeriod payrollPeriod = payrollPeriodRepository.findById(payrollPeriodId)
                 .orElseThrow(() -> new EntityNotFoundException("Payroll period not found: " + payrollPeriodId));
 
-        // Get all employees (Role.EMPLOYEE only)
+        // Get all employees (EMPLOYEE and ADMIN roles)
         List<User> employees = userRepository.findAll().stream()
-                .filter(u -> u.getRole() != null && u.getRole() == Role.EMPLOYEE)
+                .filter(u -> u.getRole() != null && u.getRole() != Role.SUPERADMIN)
                 .collect(Collectors.toList());
 
         for (User employee : employees) {

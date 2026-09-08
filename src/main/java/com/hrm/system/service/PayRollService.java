@@ -172,49 +172,48 @@ public class PayRollService {
             throw new RuntimeException("Payroll period must be locked before generating payroll");
         }
 
-        // Get total users and active employees for logging
+        // Get all eligible employees (EMPLOYEE and ADMIN roles)
         List<User> allUsers = userRepository.findAll();
         List<User> employees = allUsers.stream()
-                .filter(u -> u.getRole() != null && u.getRole() == Role.EMPLOYEE)
+                .filter(u -> u.getRole() != null && u.getRole() != Role.SUPERADMIN)
                 .collect(Collectors.toList());
 
         // Step 1: Generate attendance summaries for all active employees first
-        attendanceService.generateBulkAttendanceSummaries(payrollPeriodId);
-
-        // Step 2: Get the summaries for this period eagerly fetching employee
-        List<AttendanceSummary> summaries = attendanceSummaryRepository.findByPayrollPeriodIdWithEmployee(payrollPeriodId);
+        try {
+            attendanceService.generateBulkAttendanceSummaries(payrollPeriodId);
+        } catch (Exception e) {
+            System.err.println("Warning: Bulk attendance summary generation warning: " + e.getMessage());
+        }
 
         int generated = 0;
         int skipped   = 0;
         int failed    = 0;
         StringBuilder details = new StringBuilder();
 
-        // Step 3: Process each employee in its own independent transaction
-        for (AttendanceSummary summary : summaries) {
+        // Step 2: Process each employee directly in its own independent transaction
+        for (User employee : employees) {
             try {
                 boolean created = payrollGenerationHelper.generatePayrollForEmployee(
-                        payrollPeriodId, summary.getEmployee().getId(), generatedBy);
+                        payrollPeriodId, employee.getId(), generatedBy);
                 if (created) {
                     generated++;
-                    details.append(String.format("Generated for %s (ID: %d). ", summary.getEmployee().getName(), summary.getEmployee().getId()));
+                    details.append(String.format("Generated for %s (ID: %d). ", employee.getName(), employee.getId()));
                 } else {
                     skipped++;
-                    details.append(String.format("Skipped for %s (ID: %d) - already exists. ", summary.getEmployee().getName(), summary.getEmployee().getId()));
+                    details.append(String.format("Skipped for %s (ID: %d) - already exists. ", employee.getName(), employee.getId()));
                 }
             } catch (Exception e) {
                 failed++;
-                details.append(String.format("Failed for %s (ID: %d): %s. ", summary.getEmployee().getName(), summary.getEmployee().getId(), e.getMessage()));
+                details.append(String.format("Failed for %s (ID: %d): %s. ", employee.getName(), employee.getId(), e.getMessage()));
                 System.err.println("✗ Failed to generate payroll for employee "
-                        + summary.getEmployee().getId() + ": " + e.getMessage());
+                        + employee.getId() + ": " + e.getMessage());
                 e.printStackTrace();
             }
         }
 
         String result = String.format("Bulk payroll complete: %d generated, %d skipped, %d failed. " +
-                "Total users in system: %d. Employees found with Role.EMPLOYEE: %d. " +
-                "Summaries for this period: %d. " +
-                "Details: %s",
-                generated, skipped, failed, allUsers.size(), employees.size(), summaries.size(), details.toString());
+                "Total users: %d, Eligible employees: %d. Details: %s",
+                generated, skipped, failed, allUsers.size(), employees.size(), details.toString());
         System.out.println(result);
         return result;
     }
