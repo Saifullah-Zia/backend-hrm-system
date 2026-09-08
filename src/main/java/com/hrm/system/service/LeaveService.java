@@ -105,8 +105,8 @@ public class LeaveService {
             }
         }
 
-        // ── 6. Calculate duration
-        int duration = (int) ChronoUnit.DAYS.between(dto.getStartDate(), dto.getEndDate()) + 1;
+        // ── 6. Calculate duration (excluding weekends)
+        int duration = Leave.calculateWorkingDays(dto.getStartDate(), dto.getEndDate());
 
         // ── 7. Balance check — throws descriptive error if insufficient ───────
         // Skip balance check for UNPAID leave
@@ -325,7 +325,7 @@ public class LeaveService {
         }
 
         String leaveType = dto.getLeaveType().toUpperCase();
-        int newDuration = (int) ChronoUnit.DAYS.between(dto.getStartDate(), dto.getEndDate()) + 1;
+        int newDuration = Leave.calculateWorkingDays(dto.getStartDate(), dto.getEndDate());
         int oldDuration = leave.getDurationDays();
 
         // Release old pending days, then validate + reserve new amount

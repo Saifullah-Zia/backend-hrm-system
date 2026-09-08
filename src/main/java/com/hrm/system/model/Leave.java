@@ -6,8 +6,8 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import lombok.*;
 
+import java.time.DayOfWeek;
 import java.time.LocalDate;
-import java.time.temporal.ChronoUnit;
 
 @Getter
 @Setter
@@ -49,12 +49,28 @@ public class Leave {
     @JsonIgnore
     private User user;
 
+    public static int calculateWorkingDays(LocalDate startDate, LocalDate endDate) {
+        if (startDate == null || endDate == null || endDate.isBefore(startDate)) {
+            return 0;
+        }
+        int count = 0;
+        LocalDate curr = startDate;
+        while (!curr.isAfter(endDate)) {
+            DayOfWeek dow = curr.getDayOfWeek();
+            if (dow != DayOfWeek.SATURDAY && dow != DayOfWeek.SUNDAY) {
+                count++;
+            }
+            curr = curr.plusDays(1);
+        }
+        return count;
+    }
+
     /** Auto-calculate duration before persist / update */
     @PrePersist
     @PreUpdate
     public void calculateDuration() {
         if (startDate != null && endDate != null) {
-            this.durationDays = (int) ChronoUnit.DAYS.between(startDate, endDate) + 1;
+            this.durationDays = calculateWorkingDays(startDate, endDate);
         }
     }
 }
