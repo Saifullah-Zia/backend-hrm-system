@@ -54,6 +54,9 @@ public class PayrollGenerationHelper {
     @Autowired
     private PayrollItemRepository payrollItemRepository;
 
+    @Autowired
+    private EmployeeProfileRepository employeeProfileRepository;
+
     /**
      * Generate payroll for a single employee inside a BRAND NEW transaction.
      * If this throws, only this employee's transaction is rolled back —
@@ -101,8 +104,16 @@ public class PayrollGenerationHelper {
                             });
                 });
 
-        double basicSalary   = employee.getBasicSalary() != null ? employee.getBasicSalary() : 0.0;
-        int    workingDays   = attendanceSummary.getWorkingDays() != null ? attendanceSummary.getWorkingDays() : 26;
+        double basicSalary = 0.0;
+        if (employee.getBasicSalary() != null && employee.getBasicSalary() > 0) {
+            basicSalary = employee.getBasicSalary();
+        } else if (employeeProfileRepository != null) {
+            Optional<EmployeeProfile> profileOpt = employeeProfileRepository.findByUserId(employeeId);
+            if (profileOpt.isPresent() && profileOpt.get().getBasicSalary() != null && profileOpt.get().getBasicSalary() > 0) {
+                basicSalary = profileOpt.get().getBasicSalary();
+            }
+        }
+        int workingDays = attendanceSummary.getWorkingDays() != null ? attendanceSummary.getWorkingDays() : 26;
         
         int daysInMonth = 30;
         try {

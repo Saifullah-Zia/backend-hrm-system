@@ -42,10 +42,10 @@ public class PayrollController {
 
     @PostMapping("/generate/bulk")
     @PreAuthorize("hasRole('SUPERADMIN') or hasRole('ADMIN')")
-    public ResponseEntity<String> generateBulkPayroll(
+    public ResponseEntity<java.util.Map<String, Object>> generateBulkPayroll(
             @RequestParam Long payrollPeriodId,
             @RequestParam Long generatedBy) {
-        String result = payRollService.generateBulkPayroll(payrollPeriodId, generatedBy);
+        java.util.Map<String, Object> result = payRollService.generateBulkPayroll(payrollPeriodId, generatedBy);
         return ResponseEntity.ok(result);
     }
 

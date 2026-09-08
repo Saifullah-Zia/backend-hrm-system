@@ -164,7 +164,7 @@ public class PayRollService {
     // NOTE: intentionally NOT @Transactional — each employee runs in its own
     // independent REQUIRES_NEW transaction inside payrollGenerationHelper.
     // This prevents a single failure from marking the whole batch as rollback-only.
-    public String generateBulkPayroll(Long payrollPeriodId, Long generatedBy) {
+    public java.util.Map<String, Object> generateBulkPayroll(Long payrollPeriodId, Long generatedBy) {
         PayrollPeriod payrollPeriod = payrollPeriodRepository.findById(payrollPeriodId)
                 .orElseThrow(() -> new RuntimeException("Payroll period not found"));
 
@@ -211,11 +211,18 @@ public class PayRollService {
             }
         }
 
-        String result = String.format("Bulk payroll complete: %d generated, %d skipped, %d failed. " +
-                "Total users: %d, Eligible employees: %d. Details: %s",
-                generated, skipped, failed, allUsers.size(), employees.size(), details.toString());
-        System.out.println(result);
-        return result;
+        String msg = String.format("Bulk payroll complete: %d generated, %d skipped, %d failed.", generated, skipped, failed);
+
+        java.util.Map<String, Object> response = new java.util.HashMap<>();
+        response.put("success", true);
+        response.put("message", msg);
+        response.put("generatedCount", generated);
+        response.put("skippedCount", skipped);
+        response.put("failedCount", failed);
+        response.put("details", details.toString());
+
+        System.out.println(msg + " Details: " + details.toString());
+        return response;
     }
 
     @Transactional
