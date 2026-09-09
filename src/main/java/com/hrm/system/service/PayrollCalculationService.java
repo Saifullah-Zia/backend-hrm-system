@@ -7,6 +7,8 @@ import com.hrm.system.repository.PayrollPolicyRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.util.Optional;
 
 @Service
@@ -21,71 +23,94 @@ public class PayrollCalculationService {
         this.objectMapper = objectMapper;
     }
 
-    public double calculateDailySalary(double basicSalary, int workingDays) {
+    public BigDecimal calculateDailySalary(BigDecimal basicSalary, int workingDays) {
         if (workingDays <= 0) {
             throw new IllegalArgumentException("Working days must be greater than 0");
         }
-        return basicSalary / workingDays;
-    }
-
-    public double calculateGrossSalary(double basicSalary, double totalAllowances, double totalBonuses) {
-        return basicSalary + (totalAllowances > 0 ? totalAllowances : 0.0) + (totalBonuses > 0 ? totalBonuses : 0.0);
-    }
-
-    // NOTE: Removed misleading 5-parameter overload that accepted presentDays/paidLeaveDays
-    // but never used them. All callers should use calculateGrossSalary(basicSalary, allowances, bonuses).
-
-    public double calculateDeductions(int unpaidLeaveDays, int absentDays, int lateDays, 
-                                      double dailySalary, double manualDeductions) {
-        return calculateDeductions(unpaidLeaveDays, absentDays, lateDays, dailySalary, manualDeductions, 0.0);
-    }
-
-    public double calculateDeductions(int unpaidLeaveDays, int absentDays, int lateDays, 
-                                      double dailySalary, double manualDeductions, double incomeTax) {
-        double unpaidLeaveDeduction = applyUnpaidLeavePolicy(unpaidLeaveDays, dailySalary);
-        double absentDeduction = applyAbsentPolicy(absentDays, dailySalary);
-        double lateDeduction = applyLatePolicy(lateDays, dailySalary);
-        return unpaidLeaveDeduction + absentDeduction + lateDeduction + manualDeductions + (incomeTax > 0 ? incomeTax : 0.0);
-    }
-
-    public double calculateNetSalary(double grossSalary, double totalDeductions) {
-        return grossSalary - totalDeductions;
-    }
-
-    public double calculateIncomeTax(double monthlyTaxableSalary) {
-        if (monthlyTaxableSalary <= 0) {
-            return 0.0;
+        if (basicSalary == null || basicSalary.compareTo(BigDecimal.ZERO) <= 0) {
+            return BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
         }
+        return basicSalary.divide(BigDecimal.valueOf(workingDays), 2, RoundingMode.HALF_UP);
+    }
 
-        double annualTaxableIncome = monthlyTaxableSalary * 12.0;
+    public BigDecimal calculateGrossSalary(BigDecimal basicSalary, BigDecimal totalAllowances, BigDecimal totalBonuses) {
+        BigDecimal basic = basicSalary != null && basicSalary.compareTo(BigDecimal.ZERO) > 0 ? basicSalary : BigDecimal.ZERO;
+        BigDecimal allowances = totalAllowances != null && totalAllowances.compareTo(BigDecimal.ZERO) > 0 ? totalAllowances : BigDecimal.ZERO;
+        BigDecimal bonuses = totalBonuses != null && totalBonuses.compareTo(BigDecimal.ZERO) > 0 ? totalBonuses : BigDecimal.ZERO;
+        return basic.add(allowances).add(bonuses).setScale(2, RoundingMode.HALF_UP);
+    }
+
+    public BigDecimal calculateDeductions(int unpaidLeaveDays, int absentDays, int lateDays,
+                                       BigDecimal dailySalary, BigDecimal manualDeductions) {
+        return calculateDeductions(unpaidLeaveDays, absentDays, lateDays, dailySalary, manualDeductions, BigDecimal.ZERO);
+    }
+
+    public BigDecimal calculateDeductions(int unpaidLeaveDays, int absentDays, int lateDays,
+                                       BigDecimal dailySalary, BigDecimal manualDeductions, BigDecimal incomeTax) {
+        BigDecimal daily = dailySalary != null ? dailySalary : BigDecimal.ZERO;
+        BigDecimal manual = manualDeductions != null && manualDeductions.compareTo(BigDecimal.ZERO) > 0 ? manualDeductions : BigDecimal.ZERO;
+        BigDecimal tax = incomeTax != null && incomeTax.compareTo(BigDecimal.ZERO) > 0 ? incomeTax : BigDecimal.ZERO;
+
+        BigDecimal unpaidLeaveDeduction = applyUnpaidLeavePolicy(unpaidLeaveDays, daily);
+        BigDecimal absentDeduction = applyAbsentPolicy(absentDays, daily);
+        BigDecimal lateDeduction = applyLatePolicy(lateDays, daily);
+
+        return unpaidLeaveDeduction.add(absentDeduction).add(lateDeduction).add(manual).add(tax).setScale(2, RoundingMode.HALF_UP);
+    }
+
+    public BigDecimal calculateNetSalary(BigDecimal grossSalary, BigDecimal totalDeductions) {
+        BigDecimal gross = grossSalary != null ? grossSalary : BigDecimal.ZERO;
+        BigDecimal deductions = totalDeductions != null ? totalDeductions : BigDecimal.ZERO;
+        return gross.subtract(deductions).setScale(2, RoundingMode.HALF_UP);
+    }
+
+    public BigDecimal calculateIncomeTax(BigDecimal monthlyTaxableSalary) {
+        if (monthlyTaxableSalary == null || monthlyTaxableSalary.compareTo(BigDecimal.ZERO) <= 0) {
+            return BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
+        }
 
         Optional<PayrollPolicy> policyOpt = payrollPolicyRepository.findByIsActiveTrue();
         if (policyOpt.isPresent() && policyOpt.get().getIncomeTaxRule() != null && !policyOpt.get().getIncomeTaxRule().trim().isEmpty()) {
             try {
                 JsonNode rule = objectMapper.readTree(policyOpt.get().getIncomeTaxRule());
                 if (rule.has("enabled") && !rule.get("enabled").asBoolean()) {
-                    return 0.0;
+                    return BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
                 }
 
+                // Flat Percentage Mode
+                boolean isPercentageType = rule.has("type") && "PERCENTAGE".equalsIgnoreCase(rule.get("type").asText());
+                if (isPercentageType || (rule.has("percentage") && !rule.has("type"))) {
+                    double pct = rule.has("percentage") ? rule.get("percentage").asDouble() : 0.0;
+                    if (pct <= 0) {
+                        return BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
+                    }
+                    BigDecimal rate = BigDecimal.valueOf(pct).divide(BigDecimal.valueOf(100), 6, RoundingMode.HALF_UP);
+                    return monthlyTaxableSalary.multiply(rate).setScale(2, RoundingMode.HALF_UP);
+                }
+
+                // Progressive Slabs Mode
                 if (rule.has("slabs") && rule.get("slabs").isArray()) {
-                    double calculatedAnnualTax = 0.0;
+                    BigDecimal annualTaxableIncome = monthlyTaxableSalary.multiply(BigDecimal.valueOf(12));
+                    BigDecimal calculatedAnnualTax = BigDecimal.ZERO;
                     boolean slabMatched = false;
 
                     for (JsonNode slab : rule.get("slabs")) {
-                        double minAnnual = slab.has("minAnnual") ? slab.get("minAnnual").asDouble() : 0.0;
-                        double maxAnnual = slab.has("maxAnnual") ? slab.get("maxAnnual").asDouble() : Double.MAX_VALUE;
-                        double fixedTax = slab.has("fixedTax") ? slab.get("fixedTax").asDouble() : 0.0;
+                        BigDecimal minAnnual = slab.has("minAnnual") ? BigDecimal.valueOf(slab.get("minAnnual").asDouble()) : BigDecimal.ZERO;
+                        BigDecimal maxAnnual = slab.has("maxAnnual") ? BigDecimal.valueOf(slab.get("maxAnnual").asDouble()) : BigDecimal.valueOf(Double.MAX_VALUE);
+                        BigDecimal fixedTax = slab.has("fixedTax") ? BigDecimal.valueOf(slab.get("fixedTax").asDouble()) : BigDecimal.ZERO;
                         double taxRate = slab.has("taxRate") ? slab.get("taxRate").asDouble() : 0.0;
 
-                        if (annualTaxableIncome > minAnnual && annualTaxableIncome <= maxAnnual) {
-                            calculatedAnnualTax = fixedTax + (annualTaxableIncome - minAnnual) * (taxRate / 100.0);
+                        if (annualTaxableIncome.compareTo(minAnnual) > 0 && annualTaxableIncome.compareTo(maxAnnual) <= 0) {
+                            BigDecimal excess = annualTaxableIncome.subtract(minAnnual);
+                            BigDecimal variableTax = excess.multiply(BigDecimal.valueOf(taxRate).divide(BigDecimal.valueOf(100), 6, RoundingMode.HALF_UP));
+                            calculatedAnnualTax = fixedTax.add(variableTax);
                             slabMatched = true;
                             break;
                         }
                     }
 
                     if (slabMatched) {
-                        return Math.max(0.0, Math.round((calculatedAnnualTax / 12.0) * 100.0) / 100.0);
+                        return calculatedAnnualTax.divide(BigDecimal.valueOf(12), 2, RoundingMode.HALF_UP);
                     }
                 }
             } catch (Exception e) {
@@ -94,38 +119,56 @@ public class PayrollCalculationService {
         }
 
         // Standard Pakistan FBR Salaried Slabs (Default Fallback)
-        // Up to 600,000: 0%
-        // 600,000 - 1,200,000: 5% of amount > 600,000
-        // 1,200,000 - 2,200,000: 30,000 + 15% of amount > 1,200,000
-        // 2,200,000 - 3,200,000: 180,000 + 25% of amount > 2,200,000
-        // 3,200,000 - 4,100,000: 430,000 + 30% of amount > 3,200,000
-        // Above 4,100,000: 700,000 + 35% of amount > 4,100,000
-        double annualTax = 0.0;
-        if (annualTaxableIncome <= 600000) {
-            annualTax = 0.0;
-        } else if (annualTaxableIncome <= 1200000) {
-            annualTax = (annualTaxableIncome - 600000) * 0.05;
-        } else if (annualTaxableIncome <= 2200000) {
-            annualTax = 30000 + (annualTaxableIncome - 1200000) * 0.15;
-        } else if (annualTaxableIncome <= 3200000) {
-            annualTax = 180000 + (annualTaxableIncome - 2200000) * 0.25;
-        } else if (annualTaxableIncome <= 4100000) {
-            annualTax = 430000 + (annualTaxableIncome - 3200000) * 0.30;
+        BigDecimal annualTaxableIncome = monthlyTaxableSalary.multiply(BigDecimal.valueOf(12));
+        BigDecimal annualTax = BigDecimal.ZERO;
+        double annualVal = annualTaxableIncome.doubleValue();
+
+        if (annualVal <= 600000) {
+            annualTax = BigDecimal.ZERO;
+        } else if (annualVal <= 1200000) {
+            annualTax = annualTaxableIncome.subtract(BigDecimal.valueOf(600000)).multiply(BigDecimal.valueOf(0.05));
+        } else if (annualVal <= 2200000) {
+            annualTax = BigDecimal.valueOf(30000).add(annualTaxableIncome.subtract(BigDecimal.valueOf(1200000)).multiply(BigDecimal.valueOf(0.15)));
+        } else if (annualVal <= 3200000) {
+            annualTax = BigDecimal.valueOf(180000).add(annualTaxableIncome.subtract(BigDecimal.valueOf(2200000)).multiply(BigDecimal.valueOf(0.25)));
+        } else if (annualVal <= 4100000) {
+            annualTax = BigDecimal.valueOf(430000).add(annualTaxableIncome.subtract(BigDecimal.valueOf(3200000)).multiply(BigDecimal.valueOf(0.30)));
         } else {
-            annualTax = 700000 + (annualTaxableIncome - 4100000) * 0.35;
+            annualTax = BigDecimal.valueOf(700000).add(annualTaxableIncome.subtract(BigDecimal.valueOf(4100000)).multiply(BigDecimal.valueOf(0.35)));
         }
 
-        return Math.max(0.0, Math.round((annualTax / 12.0) * 100.0) / 100.0);
+        return annualTax.divide(BigDecimal.valueOf(12), 2, RoundingMode.HALF_UP);
     }
 
-    public double applyLatePolicy(int lateCount, double dailySalary) {
+    public String getAppliedTaxDescription(BigDecimal monthlyTaxableSalary) {
+        if (monthlyTaxableSalary == null || monthlyTaxableSalary.compareTo(BigDecimal.ZERO) <= 0) {
+            return "Monthly withholding tax";
+        }
+
+        Optional<PayrollPolicy> policyOpt = payrollPolicyRepository.findByIsActiveTrue();
+        if (policyOpt.isPresent() && policyOpt.get().getIncomeTaxRule() != null && !policyOpt.get().getIncomeTaxRule().trim().isEmpty()) {
+            try {
+                JsonNode rule = objectMapper.readTree(policyOpt.get().getIncomeTaxRule());
+                if (rule.has("enabled") && !rule.get("enabled").asBoolean()) {
+                    return "Income Tax (Exempt)";
+                }
+                boolean isPercentageType = rule.has("type") && "PERCENTAGE".equalsIgnoreCase(rule.get("type").asText());
+                if (isPercentageType || (rule.has("percentage") && !rule.has("type"))) {
+                    double pct = rule.has("percentage") ? rule.get("percentage").asDouble() : 0.0;
+                    return String.format("Income Tax (Flat Rate %.2f%%)", pct);
+                }
+                return "Income Tax (Progressive Slabs)";
+            } catch (Exception ignored) {}
+        }
+        return "Income Tax (Progressive Slabs)";
+    }
+
+    public BigDecimal applyLatePolicy(int lateCount, BigDecimal dailySalary) {
+        BigDecimal daily = dailySalary != null ? dailySalary : BigDecimal.ZERO;
         Optional<PayrollPolicy> policyOpt = payrollPolicyRepository.findByIsActiveTrue();
         if (policyOpt.isEmpty()) {
-            // Default policy: first 3 lates free, then 100 PKR per late
-            if (lateCount <= 3) {
-                return 0.0;
-            }
-            return (lateCount - 3) * 100.0;
+            if (lateCount <= 3) return BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
+            return BigDecimal.valueOf((lateCount - 3) * 100.0).setScale(2, RoundingMode.HALF_UP);
         }
 
         try {
@@ -135,27 +178,20 @@ public class PayrollCalculationService {
                 int freeLates = rule.has("freeLates") ? rule.get("freeLates").asInt() : 3;
                 double deductionPerLate = rule.has("deductionPerLate") ? rule.get("deductionPerLate").asDouble() : 100.0;
                 
-                if (lateCount <= freeLates) {
-                    return 0.0;
-                }
-                return (lateCount - freeLates) * deductionPerLate;
+                if (lateCount <= freeLates) return BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
+                return BigDecimal.valueOf((lateCount - freeLates) * deductionPerLate).setScale(2, RoundingMode.HALF_UP);
             }
-        } catch (Exception e) {
-            // Fallback to default policy if JSON parsing fails
-        }
+        } catch (Exception ignored) {}
 
-        // Default fallback
-        if (lateCount <= 3) {
-            return 0.0;
-        }
-        return (lateCount - 3) * 100.0;
+        if (lateCount <= 3) return BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
+        return BigDecimal.valueOf((lateCount - 3) * 100.0).setScale(2, RoundingMode.HALF_UP);
     }
 
-    public double applyUnpaidLeavePolicy(int unpaidLeaveDays, double dailySalary) {
+    public BigDecimal applyUnpaidLeavePolicy(int unpaidLeaveDays, BigDecimal dailySalary) {
+        BigDecimal daily = dailySalary != null ? dailySalary : BigDecimal.ZERO;
         Optional<PayrollPolicy> policyOpt = payrollPolicyRepository.findByIsActiveTrue();
         if (policyOpt.isEmpty()) {
-            // Default policy: full deduction for each unpaid leave
-            return unpaidLeaveDays * dailySalary;
+            return daily.multiply(BigDecimal.valueOf(unpaidLeaveDays)).setScale(2, RoundingMode.HALF_UP);
         }
 
         try {
@@ -165,20 +201,19 @@ public class PayrollCalculationService {
                 double deductionPercentage = rule.has("deductionPercentage") 
                     ? rule.get("deductionPercentage").asDouble() : 100.0;
                 
-                return unpaidLeaveDays * dailySalary * (deductionPercentage / 100.0);
+                BigDecimal rate = BigDecimal.valueOf(deductionPercentage).divide(BigDecimal.valueOf(100), 6, RoundingMode.HALF_UP);
+                return daily.multiply(BigDecimal.valueOf(unpaidLeaveDays)).multiply(rate).setScale(2, RoundingMode.HALF_UP);
             }
-        } catch (Exception e) {
-            // Fallback to default policy
-        }
+        } catch (Exception ignored) {}
 
-        return unpaidLeaveDays * dailySalary;
+        return daily.multiply(BigDecimal.valueOf(unpaidLeaveDays)).setScale(2, RoundingMode.HALF_UP);
     }
 
-    public double applyAbsentPolicy(int absentDays, double dailySalary) {
+    public BigDecimal applyAbsentPolicy(int absentDays, BigDecimal dailySalary) {
+        BigDecimal daily = dailySalary != null ? dailySalary : BigDecimal.ZERO;
         Optional<PayrollPolicy> policyOpt = payrollPolicyRepository.findByIsActiveTrue();
         if (policyOpt.isEmpty()) {
-            // Default policy: full deduction for each absent day
-            return absentDays * dailySalary;
+            return daily.multiply(BigDecimal.valueOf(absentDays)).setScale(2, RoundingMode.HALF_UP);
         }
 
         try {
@@ -188,12 +223,11 @@ public class PayrollCalculationService {
                 double deductionPercentage = rule.has("deductionPercentage") 
                     ? rule.get("deductionPercentage").asDouble() : 100.0;
                 
-                return absentDays * dailySalary * (deductionPercentage / 100.0);
+                BigDecimal rate = BigDecimal.valueOf(deductionPercentage).divide(BigDecimal.valueOf(100), 6, RoundingMode.HALF_UP);
+                return daily.multiply(BigDecimal.valueOf(absentDays)).multiply(rate).setScale(2, RoundingMode.HALF_UP);
             }
-        } catch (Exception e) {
-            // Fallback to default policy
-        }
+        } catch (Exception ignored) {}
 
-        return absentDays * dailySalary;
+        return daily.multiply(BigDecimal.valueOf(absentDays)).setScale(2, RoundingMode.HALF_UP);
     }
 }

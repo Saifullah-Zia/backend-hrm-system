@@ -14,6 +14,7 @@ import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
@@ -97,13 +98,14 @@ public class PayRollService {
         } catch (Exception ex) {
             daysInMonth = workingDays > 0 ? workingDays : 30;
         }
-        double dailySalary = payrollCalculationService.calculateDailySalary(basicSalary, daysInMonth);
+        BigDecimal basicSalaryBd = BigDecimal.valueOf(basicSalary);
+        BigDecimal dailySalaryBd = payrollCalculationService.calculateDailySalary(basicSalaryBd, daysInMonth);
 
         Payroll payroll = new Payroll();
         payroll.setPayrollPeriod(payrollPeriod);
         payroll.setUser(employee);
         payroll.setBasicSalary(basicSalary);
-        payroll.setDailySalary(dailySalary);
+        payroll.setDailySalary(dailySalaryBd.doubleValue());
         payroll.setWorkingDays(workingDays);
         payroll.setPresentDays(attendanceSummary.getPresentDays());
         payroll.setLateDays(attendanceSummary.getLateDays());
@@ -117,36 +119,36 @@ public class PayRollService {
         payroll.setGeneratedBy(generatedBy);
         payroll.setGeneratedAt(LocalDateTime.now());
 
-        double grossSalary = payrollCalculationService.calculateGrossSalary(basicSalary, 0.0, 0.0);
-        payroll.setGrossSalary(grossSalary);
+        BigDecimal grossSalaryBd = payrollCalculationService.calculateGrossSalary(basicSalaryBd, BigDecimal.ZERO, BigDecimal.ZERO);
+        payroll.setGrossSalary(grossSalaryBd.doubleValue());
 
         int unpaidLeaveDays = attendanceSummary.getUnpaidLeaveDays() != null ? attendanceSummary.getUnpaidLeaveDays() : 0;
         int absentDays = attendanceSummary.getAbsentDays() != null ? attendanceSummary.getAbsentDays() : 0;
         int lateDays = attendanceSummary.getLateDays() != null ? attendanceSummary.getLateDays() : 0;
-        double incomeTax = payrollCalculationService.calculateIncomeTax(grossSalary);
-        double deductions = payrollCalculationService.calculateDeductions(
-                unpaidLeaveDays, absentDays, lateDays, dailySalary, 0.0, incomeTax);
-        payroll.setTotalDeductions(deductions);
+        BigDecimal incomeTaxBd = payrollCalculationService.calculateIncomeTax(grossSalaryBd);
+        BigDecimal deductionsBd = payrollCalculationService.calculateDeductions(
+                unpaidLeaveDays, absentDays, lateDays, dailySalaryBd, BigDecimal.ZERO, incomeTaxBd);
+        payroll.setTotalDeductions(deductionsBd.doubleValue());
 
-        double netSalary = payrollCalculationService.calculateNetSalary(grossSalary, deductions);
-        payroll.setNetSalary(netSalary);
+        BigDecimal netSalaryBd = payrollCalculationService.calculateNetSalary(grossSalaryBd, deductionsBd);
+        payroll.setNetSalary(netSalaryBd.doubleValue());
 
         Payroll saved = payrollRepository.save(payroll);
 
-        if (incomeTax > 0) {
+        if (incomeTaxBd.compareTo(BigDecimal.ZERO) > 0) {
             PayrollItem taxItem = new PayrollItem();
             taxItem.setPayroll(saved);
             taxItem.setType(PayrollItemType.DEDUCTION);
             taxItem.setName("Income Tax");
-            taxItem.setAmount(incomeTax);
-            taxItem.setDescription("Monthly withholding tax");
+            taxItem.setAmount(incomeTaxBd.doubleValue());
+            taxItem.setDescription(payrollCalculationService.getAppliedTaxDescription(grossSalaryBd));
             payrollItemRepository.save(taxItem);
         }
 
         notificationService.createNotification(
                 employee.getId(),
                 String.format("💰 Your payroll for %s %s has been generated. Net salary: %.2f",
-                        payrollPeriod.getMonth(), payrollPeriod.getYear(), netSalary),
+                        payrollPeriod.getMonth(), payrollPeriod.getYear(), netSalaryBd.doubleValue()),
                 "PAYROLL",
                 employee.getId(),
                 saved.getId()
@@ -155,7 +157,7 @@ public class PayRollService {
         // Audit trail
         auditLogService.log("Payroll", saved.getId(), AuditAction.GENERATE,
                 String.format("Payroll generated for %s — period: %s %s, net: %.2f",
-                        employee.getName(), payrollPeriod.getMonth(), payrollPeriod.getYear(), netSalary),
+                        employee.getName(), payrollPeriod.getMonth(), payrollPeriod.getYear(), netSalaryBd.doubleValue()),
                 generatedBy);
 
         return mapToDto(saved);
@@ -330,10 +332,11 @@ public class PayRollService {
         } catch (Exception ex) {
             daysInMonth = workingDays > 0 ? workingDays : 30;
         }
-        double dailySalary = payrollCalculationService.calculateDailySalary(basicSalary, daysInMonth);
+        BigDecimal basicSalaryBd = BigDecimal.valueOf(basicSalary);
+        BigDecimal dailySalaryBd = payrollCalculationService.calculateDailySalary(basicSalaryBd, daysInMonth);
 
         payroll.setBasicSalary(basicSalary);
-        payroll.setDailySalary(dailySalary);
+        payroll.setDailySalary(dailySalaryBd.doubleValue());
         payroll.setWorkingDays(workingDays);
         payroll.setPresentDays(attendanceSummary.getPresentDays());
         payroll.setLateDays(attendanceSummary.getLateDays());
@@ -341,34 +344,33 @@ public class PayRollService {
         payroll.setUnpaidLeaveDays(attendanceSummary.getUnpaidLeaveDays());
         payroll.setAbsentDays(attendanceSummary.getAbsentDays());
 
-        // FIX (Finding 2): Use the standard 3-parameter calculateGrossSalary
-        double grossSalary = payrollCalculationService.calculateGrossSalary(
-                basicSalary,
-                payroll.getTotalAllowances() != null ? payroll.getTotalAllowances() : 0.0,
-                payroll.getTotalBonuses() != null ? payroll.getTotalBonuses() : 0.0);
-        payroll.setGrossSalary(grossSalary);
+        BigDecimal grossSalaryBd = payrollCalculationService.calculateGrossSalary(
+                basicSalaryBd,
+                payroll.getTotalAllowances() != null ? BigDecimal.valueOf(payroll.getTotalAllowances()) : BigDecimal.ZERO,
+                payroll.getTotalBonuses() != null ? BigDecimal.valueOf(payroll.getTotalBonuses()) : BigDecimal.ZERO);
+        payroll.setGrossSalary(grossSalaryBd.doubleValue());
 
         int unpaidLeaveDays = attendanceSummary.getUnpaidLeaveDays() != null ? attendanceSummary.getUnpaidLeaveDays() : 0;
         int absentDays = attendanceSummary.getAbsentDays() != null ? attendanceSummary.getAbsentDays() : 0;
         int lateDays = attendanceSummary.getLateDays() != null ? attendanceSummary.getLateDays() : 0;
-        double incomeTax = payrollCalculationService.calculateIncomeTax(grossSalary);
-        double deductions = payrollCalculationService.calculateDeductions(
-                unpaidLeaveDays, absentDays, lateDays, dailySalary, 0.0, incomeTax);
-        payroll.setTotalDeductions(deductions);
+        BigDecimal incomeTaxBd = payrollCalculationService.calculateIncomeTax(grossSalaryBd);
+        BigDecimal deductionsBd = payrollCalculationService.calculateDeductions(
+                unpaidLeaveDays, absentDays, lateDays, dailySalaryBd, BigDecimal.ZERO, incomeTaxBd);
+        payroll.setTotalDeductions(deductionsBd.doubleValue());
 
-        double netSalary = payrollCalculationService.calculateNetSalary(grossSalary, deductions);
-        payroll.setNetSalary(netSalary);
+        BigDecimal netSalaryBd = payrollCalculationService.calculateNetSalary(grossSalaryBd, deductionsBd);
+        payroll.setNetSalary(netSalaryBd.doubleValue());
         payroll.setStatus(PayrollStatus.DRAFT);
 
         Payroll saved = payrollRepository.save(payroll);
 
-        if (incomeTax > 0) {
+        if (incomeTaxBd.compareTo(BigDecimal.ZERO) > 0) {
             PayrollItem taxItem = new PayrollItem();
             taxItem.setPayroll(saved);
             taxItem.setType(PayrollItemType.DEDUCTION);
             taxItem.setName("Income Tax");
-            taxItem.setAmount(incomeTax);
-            taxItem.setDescription("Monthly withholding tax");
+            taxItem.setAmount(incomeTaxBd.doubleValue());
+            taxItem.setDescription(payrollCalculationService.getAppliedTaxDescription(grossSalaryBd));
             payrollItemRepository.save(taxItem);
         }
         return mapToDto(saved);
@@ -548,37 +550,29 @@ public class PayRollService {
             payroll.setStatus(PayrollStatus.valueOf(dto.getStatus()));
         }
 
-        // Recalculate gross & net using attendance-based daily salary still stored
-        double grossSalary = payrollCalculationService.calculateGrossSalary(
-                payroll.getBasicSalary(),
-                payroll.getTotalAllowances() != null ? payroll.getTotalAllowances() : 0.0,
-                payroll.getTotalBonuses()    != null ? payroll.getTotalBonuses()    : 0.0
-        );
-        payroll.setGrossSalary(grossSalary);
+        BigDecimal basicBd = payroll.getBasicSalary() != null ? BigDecimal.valueOf(payroll.getBasicSalary()) : BigDecimal.ZERO;
+        BigDecimal allowancesBd = payroll.getTotalAllowances() != null ? BigDecimal.valueOf(payroll.getTotalAllowances()) : BigDecimal.ZERO;
+        BigDecimal bonusesBd = payroll.getTotalBonuses() != null ? BigDecimal.valueOf(payroll.getTotalBonuses()) : BigDecimal.ZERO;
+        BigDecimal grossSalaryBd = payrollCalculationService.calculateGrossSalary(basicBd, allowancesBd, bonusesBd);
+        payroll.setGrossSalary(grossSalaryBd.doubleValue());
 
-        // FIX (Finding 8): Always recalculate attendance-based (auto) deductions from
-        // the stored attendance data so they are never silently lost. If the caller
-        // also sends a deductions value, treat the DIFFERENCE between that value and
-        // the auto-calculated amount as a manual adjustment.
-        double dailySalary = payroll.getDailySalary() != null ? payroll.getDailySalary() : 0.0;
+        BigDecimal dailySalaryBd = payroll.getDailySalary() != null ? BigDecimal.valueOf(payroll.getDailySalary()) : BigDecimal.ZERO;
         int unpaidLeave = payroll.getUnpaidLeaveDays() != null ? payroll.getUnpaidLeaveDays() : 0;
         int absentDays  = payroll.getAbsentDays()      != null ? payroll.getAbsentDays()      : 0;
         int lateDays    = payroll.getLateDays()         != null ? payroll.getLateDays()         : 0;
-        double autoDeductions = payrollCalculationService.calculateDeductions(
-                unpaidLeave, absentDays, lateDays, dailySalary, 0.0);
+        BigDecimal autoDeductionsBd = payrollCalculationService.calculateDeductions(
+                unpaidLeave, absentDays, lateDays, dailySalaryBd, BigDecimal.ZERO);
 
-        double totalDeductions;
+        BigDecimal totalDeductionsBd;
         if (dto.getDeductions() != null) {
-            // Caller sent an explicit total — honour it (may include manual adjustments)
-            totalDeductions = dto.getDeductions();
+            totalDeductionsBd = BigDecimal.valueOf(dto.getDeductions());
         } else {
-            // No explicit override — use auto-calculated deductions
-            totalDeductions = autoDeductions;
+            totalDeductionsBd = autoDeductionsBd;
         }
-        payroll.setTotalDeductions(totalDeductions);
+        payroll.setTotalDeductions(totalDeductionsBd.doubleValue());
 
-        double netSalary = payrollCalculationService.calculateNetSalary(grossSalary, totalDeductions);
-        payroll.setNetSalary(netSalary);
+        BigDecimal netSalaryBd = payrollCalculationService.calculateNetSalary(grossSalaryBd, totalDeductionsBd);
+        payroll.setNetSalary(netSalaryBd.doubleValue());
 
         Payroll saved = payrollRepository.save(payroll);
 

@@ -1,6 +1,9 @@
 package com.hrm.system.service;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.hrm.system.dto.PayrollPolicyDto;
+import com.hrm.system.enumm.AuditAction;
 import com.hrm.system.model.PayrollPolicy;
 import com.hrm.system.repository.PayrollPolicyRepository;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -15,14 +18,43 @@ import java.util.stream.Collectors;
 public class PayrollPolicyService {
 
     private final PayrollPolicyRepository payrollPolicyRepository;
+    private final AuditLogService auditLogService;
+    private final ObjectMapper objectMapper;
 
     @Autowired
-    public PayrollPolicyService(PayrollPolicyRepository payrollPolicyRepository) {
+    public PayrollPolicyService(PayrollPolicyRepository payrollPolicyRepository,
+                                AuditLogService auditLogService,
+                                ObjectMapper objectMapper) {
         this.payrollPolicyRepository = payrollPolicyRepository;
+        this.auditLogService = auditLogService;
+        this.objectMapper = objectMapper;
+    }
+
+    public void validateIncomeTaxRule(String incomeTaxRule) {
+        if (incomeTaxRule == null || incomeTaxRule.trim().isEmpty()) {
+            return;
+        }
+        try {
+            JsonNode rule = objectMapper.readTree(incomeTaxRule);
+            boolean isPercentageType = rule.has("type") && "PERCENTAGE".equalsIgnoreCase(rule.get("type").asText());
+            if (isPercentageType || (rule.has("percentage") && !rule.has("type"))) {
+                if (!rule.has("percentage") || rule.get("percentage").isNull()) {
+                    throw new IllegalArgumentException("Tax percentage must be specified for flat percentage mode");
+                }
+                double pct = rule.get("percentage").asDouble();
+                if (pct < 0.0 || pct > 100.0) {
+                    throw new IllegalArgumentException("Tax percentage must be between 0.0 and 100.0");
+                }
+            }
+        } catch (IllegalArgumentException e) {
+            throw e;
+        } catch (Exception ignored) {}
     }
 
     @Transactional
     public PayrollPolicyDto createPolicy(PayrollPolicyDto dto) {
+        validateIncomeTaxRule(dto.getIncomeTaxRule());
+
         // Deactivate any existing active policy
         Optional<PayrollPolicy> existingActive = payrollPolicyRepository.findByIsActiveTrue();
         existingActive.ifPresent(policy -> {
@@ -39,11 +71,19 @@ public class PayrollPolicyService {
         policy.setDescription(dto.getDescription());
 
         PayrollPolicy saved = payrollPolicyRepository.save(policy);
+
+        if (auditLogService != null) {
+            auditLogService.log("PayrollPolicy", saved.getId(), AuditAction.CREATE,
+                    "Created new active payroll policy: " + saved.getDescription(), 1L);
+        }
+
         return mapToDto(saved);
     }
 
     @Transactional
     public PayrollPolicyDto updatePolicy(Long policyId, PayrollPolicyDto dto) {
+        validateIncomeTaxRule(dto.getIncomeTaxRule());
+
         PayrollPolicy policy = payrollPolicyRepository.findById(policyId)
                 .orElseThrow(() -> new RuntimeException("Payroll policy not found"));
 
@@ -66,6 +106,12 @@ public class PayrollPolicyService {
         }
 
         PayrollPolicy saved = payrollPolicyRepository.save(policy);
+
+        if (auditLogService != null) {
+            auditLogService.log("PayrollPolicy", saved.getId(), AuditAction.UPDATE,
+                    "Updated payroll policy rules: " + saved.getDescription(), 1L);
+        }
+
         return mapToDto(saved);
     }
 
