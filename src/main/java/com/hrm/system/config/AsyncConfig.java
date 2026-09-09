@@ -27,6 +27,17 @@ public class AsyncConfig implements AsyncConfigurer {
         return executor;
     }
 
+    @Bean(name = "payrollEmailExecutor")
+    public Executor payrollEmailExecutor() {
+        ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
+        executor.setCorePoolSize(4);
+        executor.setMaxPoolSize(10);
+        executor.setQueueCapacity(500);
+        executor.setThreadNamePrefix("payroll-email-");
+        executor.initialize();
+        return executor;
+    }
+
     /**
      * NOTE: intentionally NOT overriding getAsyncExecutor() here.
      * startupTaskExecutor is a single-thread, capacity-2 pool meant for

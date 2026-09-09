@@ -3,7 +3,9 @@ package com.hrm.system.service;
 import com.hrm.system.model.*;
 import com.hrm.system.enumm.AuditAction;
 import com.hrm.system.repository.*;
+import com.hrm.system.event.PayrollNotificationEvent;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
@@ -57,6 +59,9 @@ public class PayrollGenerationHelper {
 
     @Autowired
     private EmployeeProfileRepository employeeProfileRepository;
+
+    @Autowired
+    private ApplicationEventPublisher eventPublisher;
 
     /**
      * Generate payroll for a single employee inside a BRAND NEW transaction.
@@ -190,6 +195,69 @@ public class PayrollGenerationHelper {
                         employee.getName(), payrollPeriod.getMonth(), payrollPeriod.getYear(), netSalaryBd.doubleValue()),
                 generatedBy);
 
+        // Publish event for AFTER_COMMIT async email notification
+        eventPublisher.publishEvent(PayrollNotificationEvent.builder()
+                .type(PayrollNotificationEvent.NotificationType.GENERATED)
+                .payrollId(saved.getId())
+                .employeeId(employee.getId())
+                .employeeName(employee.getName())
+                .employeeEmail(employee.getEmail())
+                .month(payrollPeriod.getMonth())
+                .year(payrollPeriod.getYear())
+                .netSalary(netSalaryBd)
+                .build());
+
         return true;
+    }
+
+    /**
+     * Approve individual employee payroll inside a BRAND NEW transaction.
+     * Each approval commits independently, ensuring partial-success resilience and
+     * triggering AFTER_COMMIT email notifications immediately per employee.
+     */
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public Payroll approvePayrollForEmployee(Long payrollId, Long approvedBy) {
+        Payroll payroll = payrollRepository.findById(payrollId)
+                .orElseThrow(() -> new RuntimeException("Payroll not found: " + payrollId));
+
+        // Idempotency status guard: if already APPROVED or PAID, skip status change & notification
+        if (payroll.getStatus() == PayrollStatus.APPROVED || payroll.getStatus() == PayrollStatus.PAID) {
+            return payroll;
+        }
+
+        payroll.setStatus(PayrollStatus.APPROVED);
+        payroll.setApprovedBy(approvedBy);
+        payroll.setApprovedAt(LocalDateTime.now());
+        Payroll saved = payrollRepository.save(payroll);
+
+        BigDecimal netSalaryBd = saved.getNetSalary() != null ? BigDecimal.valueOf(saved.getNetSalary()) : BigDecimal.ZERO;
+
+        notificationService.createNotification(
+                payroll.getUser().getId(),
+                String.format("💰 Your payroll for %s %s has been approved. Net salary: %.2f",
+                        payroll.getPayrollPeriod().getMonth(), payroll.getPayrollPeriod().getYear(),
+                        saved.getNetSalary()),
+                "PAYROLL", payroll.getUser().getId(), saved.getId()
+        );
+
+        // Audit trail
+        auditLogService.log("Payroll", saved.getId(), AuditAction.APPROVE,
+                String.format("Payroll approved for %s — net: %.2f",
+                        payroll.getUser().getName(), saved.getNetSalary()),
+                approvedBy);
+
+        // Publish event for AFTER_COMMIT async email notification
+        eventPublisher.publishEvent(PayrollNotificationEvent.builder()
+                .type(PayrollNotificationEvent.NotificationType.APPROVED)
+                .payrollId(saved.getId())
+                .employeeId(payroll.getUser().getId())
+                .employeeName(payroll.getUser().getName())
+                .employeeEmail(payroll.getUser().getEmail())
+                .month(payroll.getPayrollPeriod().getMonth())
+                .year(payroll.getPayrollPeriod().getYear())
+                .netSalary(netSalaryBd)
+                .build());
+
+        return saved;
     }
 }

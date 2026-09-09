@@ -11,9 +11,14 @@ import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.web.util.HtmlUtils;
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.util.HashMap;
 import java.util.Map;
 
+@Slf4j
 @Service
 public class EmailService {
 
@@ -79,40 +84,63 @@ public class EmailService {
         }
     }
 
-    // Send Payroll Notification
+    @Deprecated
     public void sendPayrollNotification(String toEmail, String month, int year) {
+        sendPayrollNotification(toEmail, "Employee", month, year, BigDecimal.ZERO, null);
+    }
+
+    // Send Payroll Generated Notification
+    public void sendPayrollNotification(String toEmail, String employeeName, String month, Integer year, BigDecimal netSalary, Long employeeId) {
+        if (toEmail == null || toEmail.trim().isEmpty()) {
+            log.warn("⚠️ Cannot send payroll notification: Employee ID {} ({}) has no email address configured.",
+                    employeeId, employeeName);
+            return;
+        }
+
+        String safeName = HtmlUtils.htmlEscape(employeeName != null ? employeeName : "Employee");
+        String safeMonth = HtmlUtils.htmlEscape(month != null ? month : "");
+        int safeYear = year != null ? year : 2026;
+        String salaryStr = netSalary != null ? netSalary.setScale(2, RoundingMode.HALF_UP).toString() : "0.00";
+
         String htmlContent = """
             <!DOCTYPE html>
             <html>
             <head><style>
-                body { font-family: Arial, sans-serif; }
-                .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-                .header { background-color: #4F46E5; color: white; padding: 20px; text-align: center; }
-                .content { padding: 20px; background-color: #f9fafb; }
-                .footer { text-align: center; padding: 20px; font-size: 12px; color: #6b7280; }
+                body { font-family: Arial, sans-serif; background-color: #f3f4f6; margin: 0; padding: 0; }
+                .container { max-width: 600px; margin: 20px auto; background-color: #ffffff; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
+                .header { background-color: #4F46E5; color: white; padding: 24px; text-align: center; }
+                .header h2 { margin: 0; font-size: 22px; }
+                .content { padding: 24px; background-color: #ffffff; color: #374151; }
+                .salary-box { background-color: #eef2ff; border-left: 4px solid #4F46E5; padding: 16px; margin: 16px 0; border-radius: 4px; }
+                .salary-amount { font-size: 24px; font-weight: bold; color: #4F46E5; margin-top: 4px; }
+                .footer { text-align: center; padding: 16px; font-size: 12px; color: #6b7280; background-color: #f9fafb; border-top: 1px solid #f3f4f6; }
             </style></head>
             <body>
                 <div class="container">
                     <div class="header">
-                        <h2>Payroll Generated</h2>
+                        <h2>💰 Payroll Generated</h2>
                     </div>
                     <div class="content">
-                        <p>Dear Employee,</p>
+                        <p>Dear <strong>%s</strong>,</p>
                         <p>Your payroll for <strong>%s %d</strong> has been generated.</p>
-                        <p>Please login to the HRM system to view your payslip.</p>
-                        <p>Regards,<br>HR Department</p>
+                        <div class="salary-box">
+                            <div>Net Payable Salary:</div>
+                            <div class="salary-amount">PKR %s</div>
+                        </div>
+                        <p>Please login to the HRM system to view your full payslip breakdown.</p>
+                        <p>Regards,<br><strong>HR Department</strong></p>
                     </div>
                     <div class="footer">
-                        <p>© 2026 HRM System. All rights reserved.</p>
+                        <p>© 2026 JCAT Solutions HRM. All rights reserved.</p>
                     </div>
                 </div>
             </body>
             </html>
-        """.formatted(month, year);
+        """.formatted(safeName, safeMonth, safeYear, salaryStr);
 
         String apiKey = System.getenv("RESEND_API_KEY");
         if (apiKey != null && !apiKey.trim().isEmpty()) {
-            sendViaResend(toEmail, "Payroll Generated - " + month + " " + year, htmlContent, true);
+            sendViaResend(toEmail, "Payroll Generated - " + safeMonth + " " + safeYear, htmlContent, true);
             return;
         }
 
@@ -122,14 +150,82 @@ public class EmailService {
             MimeMessageHelper helper = new MimeMessageHelper(message, true, "UTF-8");
             helper.setFrom(fromEmail);
             helper.setTo(toEmail);
-            helper.setSubject("Payroll Generated - " + month + " " + year);
+            helper.setSubject("Payroll Generated - " + safeMonth + " " + safeYear);
             helper.setText(htmlContent, true);
             mailSender.send(message);
-            System.out.println("✓ Payroll email sent to: " + toEmail);
+            log.info("✓ Payroll generated email sent via SMTP to: {} (Employee ID {})", toEmail, employeeId);
         } catch (Exception e) {
-            System.err.println("✗ Failed to send payroll email to: " + toEmail);
-            e.printStackTrace();
-            throw new RuntimeException("Email sending failed: " + e.getMessage(), e);
+            log.error("✗ Failed to send payroll generated email to: {} (Employee ID {}): {}", toEmail, employeeId, e.getMessage(), e);
+        }
+    }
+
+    // Send Payroll Approved Notification
+    public void sendPayrollApprovedNotification(String toEmail, String employeeName, String month, Integer year, BigDecimal netSalary, Long employeeId) {
+        if (toEmail == null || toEmail.trim().isEmpty()) {
+            log.warn("⚠️ Cannot send payroll approved notification: Employee ID {} ({}) has no email address configured.",
+                    employeeId, employeeName);
+            return;
+        }
+
+        String safeName = HtmlUtils.htmlEscape(employeeName != null ? employeeName : "Employee");
+        String safeMonth = HtmlUtils.htmlEscape(month != null ? month : "");
+        int safeYear = year != null ? year : 2026;
+        String salaryStr = netSalary != null ? netSalary.setScale(2, RoundingMode.HALF_UP).toString() : "0.00";
+
+        String htmlContent = """
+            <!DOCTYPE html>
+            <html>
+            <head><style>
+                body { font-family: Arial, sans-serif; background-color: #f3f4f6; margin: 0; padding: 0; }
+                .container { max-width: 600px; margin: 20px auto; background-color: #ffffff; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
+                .header { background-color: #16A34A; color: white; padding: 24px; text-align: center; }
+                .header h2 { margin: 0; font-size: 22px; }
+                .content { padding: 24px; background-color: #ffffff; color: #374151; }
+                .salary-box { background-color: #f0fdf4; border-left: 4px solid #16A34A; padding: 16px; margin: 16px 0; border-radius: 4px; }
+                .salary-amount { font-size: 24px; font-weight: bold; color: #16A34A; margin-top: 4px; }
+                .footer { text-align: center; padding: 16px; font-size: 12px; color: #6b7280; background-color: #f9fafb; border-top: 1px solid #f3f4f6; }
+            </style></head>
+            <body>
+                <div class="container">
+                    <div class="header">
+                        <h2>✅ Payroll Approved</h2>
+                    </div>
+                    <div class="content">
+                        <p>Dear <strong>%s</strong>,</p>
+                        <p>Great news! Your payroll for <strong>%s %d</strong> has been <strong>approved</strong> by management.</p>
+                        <div class="salary-box">
+                            <div>Approved Net Salary:</div>
+                            <div class="salary-amount">PKR %s</div>
+                        </div>
+                        <p>Please login to the HRM system for details regarding payment processing.</p>
+                        <p>Regards,<br><strong>HR Department</strong></p>
+                    </div>
+                    <div class="footer">
+                        <p>© 2026 JCAT Solutions HRM. All rights reserved.</p>
+                    </div>
+                </div>
+            </body>
+            </html>
+        """.formatted(safeName, safeMonth, safeYear, salaryStr);
+
+        String apiKey = System.getenv("RESEND_API_KEY");
+        if (apiKey != null && !apiKey.trim().isEmpty()) {
+            sendViaResend(toEmail, "Payroll Approved - " + safeMonth + " " + safeYear, htmlContent, true);
+            return;
+        }
+
+        // Fallback to SMTP
+        try {
+            MimeMessage message = mailSender.createMimeMessage();
+            MimeMessageHelper helper = new MimeMessageHelper(message, true, "UTF-8");
+            helper.setFrom(fromEmail);
+            helper.setTo(toEmail);
+            helper.setSubject("Payroll Approved - " + safeMonth + " " + safeYear);
+            helper.setText(htmlContent, true);
+            mailSender.send(message);
+            log.info("✓ Payroll approved email sent via SMTP to: {} (Employee ID {})", toEmail, employeeId);
+        } catch (Exception e) {
+            log.error("✗ Failed to send payroll approved email to: {} (Employee ID {}): {}", toEmail, employeeId, e.getMessage(), e);
         }
     }
 

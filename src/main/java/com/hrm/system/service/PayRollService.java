@@ -5,6 +5,8 @@ import com.hrm.system.dto.PayRollDto;
 import com.hrm.system.enumm.AuditAction;
 import com.hrm.system.model.*;
 import com.hrm.system.repository.*;
+import com.hrm.system.event.PayrollNotificationEvent;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -22,6 +24,9 @@ import java.util.stream.Collectors;
 
 @Service
 public class PayRollService {
+
+    @Autowired
+    private ApplicationEventPublisher eventPublisher;
 
     @Autowired
     private PayrollRepository payrollRepository;
@@ -160,6 +165,18 @@ public class PayRollService {
                         employee.getName(), payrollPeriod.getMonth(), payrollPeriod.getYear(), netSalaryBd.doubleValue()),
                 generatedBy);
 
+        // Publish event for AFTER_COMMIT async email notification
+        eventPublisher.publishEvent(PayrollNotificationEvent.builder()
+                .type(PayrollNotificationEvent.NotificationType.GENERATED)
+                .payrollId(saved.getId())
+                .employeeId(employee.getId())
+                .employeeName(employee.getName())
+                .employeeEmail(employee.getEmail())
+                .month(payrollPeriod.getMonth())
+                .year(payrollPeriod.getYear())
+                .netSalary(netSalaryBd)
+                .build());
+
         return mapToDto(saved);
     }
 
@@ -257,6 +274,19 @@ public class PayRollService {
                 String.format("Payroll approved for %s — net: %.2f",
                         payroll.getUser().getName(), saved.getNetSalary()),
                 approvedBy);
+
+        BigDecimal netSalaryBd = saved.getNetSalary() != null ? BigDecimal.valueOf(saved.getNetSalary()) : BigDecimal.ZERO;
+        // Publish event for AFTER_COMMIT async email notification
+        eventPublisher.publishEvent(PayrollNotificationEvent.builder()
+                .type(PayrollNotificationEvent.NotificationType.APPROVED)
+                .payrollId(saved.getId())
+                .employeeId(payroll.getUser().getId())
+                .employeeName(payroll.getUser().getName())
+                .employeeEmail(payroll.getUser().getEmail())
+                .month(payroll.getPayrollPeriod().getMonth())
+                .year(payroll.getPayrollPeriod().getYear())
+                .netSalary(netSalaryBd)
+                .build());
 
         return mapToDto(saved);
     }
@@ -614,27 +644,17 @@ public class PayRollService {
 
     // ─── Bulk Approve ─────────────────────────────────────────────────────────
 
-    @Transactional
+    // NOTE: intentionally NOT @Transactional — each employee approval runs in its own
+    // independent REQUIRES_NEW transaction inside payrollGenerationHelper.
     public List<PayRollDto> approveBulkPayroll(List<Long> ids, Long approvedBy) {
         List<PayRollDto> results = new java.util.ArrayList<>();
         for (Long id : ids) {
-            Payroll payroll = payrollRepository.findById(id)
-                    .orElseThrow(() -> new RuntimeException("Payroll not found: " + id));
-            if (payroll.getStatus() == PayrollStatus.APPROVED || payroll.getStatus() == PayrollStatus.PAID) {
-                results.add(mapToDto(payroll));
-                continue;
+            try {
+                Payroll approved = payrollGenerationHelper.approvePayrollForEmployee(id, approvedBy);
+                results.add(mapToDto(approved));
+            } catch (Exception e) {
+                System.err.println("✗ Failed to approve payroll ID " + id + ": " + e.getMessage());
             }
-            payroll.setStatus(PayrollStatus.APPROVED);
-            payroll.setApprovedBy(approvedBy);
-            payroll.setApprovedAt(LocalDateTime.now());
-            Payroll saved = payrollRepository.save(payroll);
-            notificationService.createNotification(
-                    payroll.getUser().getId(),
-                    String.format("💰 Your payroll for %s %s has been approved. Net salary: %.2f",
-                            payroll.getPayrollPeriod().getMonth(), payroll.getPayrollPeriod().getYear(), saved.getNetSalary()),
-                    "PAYROLL", payroll.getUser().getId(), saved.getId()
-            );
-            results.add(mapToDto(saved));
         }
         return results;
     }
