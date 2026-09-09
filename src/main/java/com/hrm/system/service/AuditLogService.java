@@ -2,7 +2,6 @@ package com.hrm.system.service;
 
 import com.hrm.system.dto.AuditLogDto;
 import com.hrm.system.enumm.AuditAction;
-import com.hrm.system.exception.ResourceNotFoundException;
 import com.hrm.system.model.AuditLog;
 import com.hrm.system.model.User;
 import com.hrm.system.repository.AuditLogRepository;
@@ -11,59 +10,40 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
-import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.transaction.annotation.Propagation;
 
 import java.util.List;
 import java.util.stream.Collectors;
 
+/**
+ * Public-facing audit log API.
+ *
+ * IMPORTANT: this class must NEVER call an @Async/@Transactional method on
+ * itself (i.e. `this.someAsyncMethod()`). Doing so bypasses the Spring AOP
+ * proxy entirely, silently ignoring @Async and @Transactional. That was the
+ * root cause of the payroll rollback incident. All async/transactional log
+ * writes are delegated to AuditLogExecutor, a *separate* bean, so calls go
+ * through the proxy correctly.
+ */
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class AuditLogService {
 
     private final AuditLogRepository auditLogRepository;
-    private final UserRepository     userRepository;
+    private final AuditLogExecutor auditLogExecutor;
 
-    // LOG — called by other services after any state change
-    // Runs asynchronously so it never blocks the main flow
-    @Async
-    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    // LOG — full request, delegates to the async executor bean
     public void log(AuditLogDto.LogRequest request) {
-        try {
-            User performer = null;
-            if (request.getPerformedByUserId() != null) {
-                performer = userRepository.findById(request.getPerformedByUserId()).orElse(null);
-            }
-            String performerName = performer != null ? performer.getName() : "System";
-
-            AuditLog entry = AuditLog.builder()
-                    .entityName(request.getEntityName())
-                    .entityId(request.getEntityId())
-                    .action(request.getAction())
-                    .description(request.getDescription())
-                    .oldValue(request.getOldValue())
-                    .newValue(request.getNewValue())
-                    .performedBy(performer)
-                    .performedByName(performerName)
-                    .ipAddress(request.getIpAddress())
-                    .build();
-
-            auditLogRepository.save(entry);
-        } catch (Exception ex) {
-            // Audit failures must never crash business logic
-            log.error("Failed to write audit log: entity={} id={} action={}",
-                    request.getEntityName(), request.getEntityId(),
-                    request.getAction(), ex);
-        }
+        auditLogExecutor.log(request);
     }
 
     // Convenience overload — no IP, no JSON snapshots
+    // Delegates to the executor bean directly (NOT this.log(...))
     public void log(String entityName, Long entityId,
                     AuditAction action, String description, Long performedByUserId) {
-        log(AuditLogDto.LogRequest.builder()
+        auditLogExecutor.log(AuditLogDto.LogRequest.builder()
                 .entityName(entityName)
                 .entityId(entityId)
                 .action(action)
