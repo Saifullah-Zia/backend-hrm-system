@@ -118,7 +118,7 @@ public class PayrollCalculationService {
             }
         }
 
-        // Standard Pakistan FBR Salaried Slabs (Default Fallback)
+        // Standard Pakistan FBR Salaried Slabs (Finance Act 2026 Fallback)
         BigDecimal annualTaxableIncome = monthlyTaxableSalary.multiply(BigDecimal.valueOf(12));
         BigDecimal annualTax = BigDecimal.ZERO;
         double annualVal = annualTaxableIncome.doubleValue();
@@ -126,15 +126,25 @@ public class PayrollCalculationService {
         if (annualVal <= 600000) {
             annualTax = BigDecimal.ZERO;
         } else if (annualVal <= 1200000) {
-            annualTax = annualTaxableIncome.subtract(BigDecimal.valueOf(600000)).multiply(BigDecimal.valueOf(0.05));
+            // 1% of amount above Rs. 600,000
+            annualTax = annualTaxableIncome.subtract(BigDecimal.valueOf(600000))
+                    .multiply(BigDecimal.valueOf(0.01));
         } else if (annualVal <= 2200000) {
-            annualTax = BigDecimal.valueOf(30000).add(annualTaxableIncome.subtract(BigDecimal.valueOf(1200000)).multiply(BigDecimal.valueOf(0.15)));
+            // Rs. 6,000 + 11% of amount above Rs. 1,200,000
+            annualTax = BigDecimal.valueOf(6000)
+                    .add(annualTaxableIncome.subtract(BigDecimal.valueOf(1200000)).multiply(BigDecimal.valueOf(0.11)));
         } else if (annualVal <= 3200000) {
-            annualTax = BigDecimal.valueOf(180000).add(annualTaxableIncome.subtract(BigDecimal.valueOf(2200000)).multiply(BigDecimal.valueOf(0.25)));
+            // Rs. 116,000 + 20% of amount above Rs. 2,200,000
+            annualTax = BigDecimal.valueOf(116000)
+                    .add(annualTaxableIncome.subtract(BigDecimal.valueOf(2200000)).multiply(BigDecimal.valueOf(0.20)));
         } else if (annualVal <= 4100000) {
-            annualTax = BigDecimal.valueOf(430000).add(annualTaxableIncome.subtract(BigDecimal.valueOf(3200000)).multiply(BigDecimal.valueOf(0.30)));
+            // Rs. 316,000 + 25% of amount above Rs. 3,200,000
+            annualTax = BigDecimal.valueOf(316000)
+                    .add(annualTaxableIncome.subtract(BigDecimal.valueOf(3200000)).multiply(BigDecimal.valueOf(0.25)));
         } else {
-            annualTax = BigDecimal.valueOf(700000).add(annualTaxableIncome.subtract(BigDecimal.valueOf(4100000)).multiply(BigDecimal.valueOf(0.35)));
+            // Rs. 541,000 + 29% of amount above Rs. 4,100,000
+            annualTax = BigDecimal.valueOf(541000)
+                    .add(annualTaxableIncome.subtract(BigDecimal.valueOf(4100000)).multiply(BigDecimal.valueOf(0.29)));
         }
 
         return annualTax.divide(BigDecimal.valueOf(12), 2, RoundingMode.HALF_UP);
