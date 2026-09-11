@@ -147,4 +147,11 @@ public class PayrollController {
             @RequestParam Long approvedBy) {
         return ResponseEntity.ok(payRollService.approveBulkPayroll(ids, approvedBy));
     }
+
+    @PutMapping("/bulk-pay")
+    @PreAuthorize("hasRole('SUPERADMIN') or hasRole('ADMIN')")
+    public ResponseEntity<java.util.List<PayRollDto>> payBulkPayroll(
+            @RequestBody java.util.List<Long> ids) {
+        return ResponseEntity.ok(payRollService.payBulkPayroll(ids));
+    }
 }

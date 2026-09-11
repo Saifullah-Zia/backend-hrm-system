@@ -260,4 +260,39 @@ public class PayrollGenerationHelper {
 
         return saved;
     }
+
+    /**
+     * Mark individual employee payroll as PAID inside a BRAND NEW transaction.
+     * Each payment commits independently, ensuring partial-success resilience and
+     * triggering AFTER_COMMIT notifications immediately per employee.
+     */
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public Payroll payPayrollForEmployee(Long payrollId) {
+        Payroll payroll = payrollRepository.findById(payrollId)
+                .orElseThrow(() -> new RuntimeException("Payroll not found: " + payrollId));
+
+        if (payroll.getStatus() == PayrollStatus.PAID) {
+            return payroll;
+        }
+
+        payroll.setStatus(PayrollStatus.PAID);
+        payroll.setPaidAt(LocalDateTime.now());
+        Payroll saved = payrollRepository.save(payroll);
+
+        notificationService.createNotification(
+                payroll.getUser().getId(),
+                String.format("💰 Your payroll for %s %s has been paid. Net salary: %.2f",
+                        payroll.getPayrollPeriod().getMonth(), payroll.getPayrollPeriod().getYear(),
+                        saved.getNetSalary()),
+                "PAYROLL", payroll.getUser().getId(), saved.getId()
+        );
+
+        // Audit trail
+        auditLogService.log("Payroll", saved.getId(), AuditAction.UPDATE,
+                String.format("Payroll marked as PAID for %s — net: %.2f",
+                        payroll.getUser().getName(), saved.getNetSalary()),
+                payroll.getApprovedBy() != null ? payroll.getApprovedBy() : payroll.getGeneratedBy());
+
+        return saved;
+    }
 }

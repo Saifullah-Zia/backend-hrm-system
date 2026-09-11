@@ -91,7 +91,7 @@ public class SecurityConfig {
                         .requestMatchers("/api/attendance/**").hasAnyRole("ADMIN", "SUPERADMIN")
                         // Payroll endpoints
                         .requestMatchers(HttpMethod.POST, "/api/payroll/generate", "/api/payroll/generate/bulk").hasAnyRole("ADMIN", "SUPERADMIN")
-                        .requestMatchers(HttpMethod.PUT, "/api/payroll/*/approve", "/api/payroll/*/pay", "/api/payroll/*/regenerate").hasAnyRole("ADMIN", "SUPERADMIN")
+                        .requestMatchers(HttpMethod.PUT, "/api/payroll/*/approve", "/api/payroll/*/pay", "/api/payroll/*/regenerate", "/api/payroll/bulk-approve", "/api/payroll/bulk-pay").hasAnyRole("ADMIN", "SUPERADMIN")
                         .requestMatchers(HttpMethod.GET, "/api/payroll/period/*").hasAnyRole("ADMIN", "SUPERADMIN")
                         .requestMatchers(HttpMethod.POST, "/api/payroll").hasAnyRole("ADMIN", "SUPERADMIN")
                         .requestMatchers(HttpMethod.PUT, "/api/payroll/*").hasAnyRole("ADMIN", "SUPERADMIN")

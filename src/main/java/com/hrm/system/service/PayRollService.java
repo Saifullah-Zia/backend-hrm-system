@@ -659,6 +659,21 @@ public class PayRollService {
         return results;
     }
 
+    // ─── Bulk Pay ─────────────────────────────────────────────────────────────
+
+    public List<PayRollDto> payBulkPayroll(List<Long> ids) {
+        List<PayRollDto> results = new java.util.ArrayList<>();
+        for (Long id : ids) {
+            try {
+                Payroll paid = payrollGenerationHelper.payPayrollForEmployee(id);
+                results.add(mapToDto(paid));
+            } catch (Exception e) {
+                System.err.println("✗ Failed to mark payroll ID " + id + " as paid: " + e.getMessage());
+            }
+        }
+        return results;
+    }
+
     // ─── Delete ───────────────────────────────────────────────────────────────
 
     public void deletePayroll(Long id) {
