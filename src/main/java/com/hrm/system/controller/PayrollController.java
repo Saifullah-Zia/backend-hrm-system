@@ -136,9 +136,15 @@ public class PayrollController {
     @DeleteMapping("/bulk")
     @PreAuthorize("hasRole('SUPERADMIN') or hasRole('ADMIN')")
     public ResponseEntity<String> deleteBulkPayroll(@RequestBody java.util.List<Long> ids) {
-        payRollService.deleteBulkPayroll(ids);
-        return ResponseEntity.ok("Payroll records deleted successfully: " + ids.size());
+        int deleted = payRollService.deleteBulkPayroll(ids);
+        int skipped = ids.size() - deleted;
+        String msg = "Deleted " + deleted + " payroll record(s) successfully.";
+        if (skipped > 0) {
+            msg += " " + skipped + " PAID record(s) were skipped (paid payrolls cannot be deleted).";
+        }
+        return ResponseEntity.ok(msg);
     }
+
 
     @PutMapping("/bulk-approve")
     @PreAuthorize("hasRole('SUPERADMIN') or hasRole('ADMIN')")

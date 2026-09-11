@@ -630,16 +630,25 @@ public class PayRollService {
 
     // ─── Bulk Delete ──────────────────────────────────────────────────────────
 
+    /**
+     * Bulk-delete payrolls by IDs.
+     * PAID payrolls are silently skipped (they are financial records; deleting them
+     * would break audit trails). Returns the number of records actually deleted.
+     */
     @Transactional
-    public void deleteBulkPayroll(List<Long> ids) {
+    public int deleteBulkPayroll(List<Long> ids) {
+        int deleted = 0;
         for (Long id : ids) {
             Payroll payroll = payrollRepository.findById(id)
                     .orElseThrow(() -> new RuntimeException("Payroll not found: " + id));
             if (payroll.getStatus() == PayrollStatus.PAID) {
-                throw new RuntimeException("Cannot delete paid payroll (ID: " + id + ")");
+                // Skip PAID payrolls — they are immutable financial records.
+                continue;
             }
             payrollRepository.deleteById(id);
+            deleted++;
         }
+        return deleted;
     }
 
     // ─── Bulk Approve ─────────────────────────────────────────────────────────
@@ -676,9 +685,15 @@ public class PayRollService {
 
     // ─── Delete ───────────────────────────────────────────────────────────────
 
+    /**
+     * Delete a single payroll record.
+     * PAID payrolls cannot be deleted — they are immutable financial records.
+     */
     public void deletePayroll(Long id) {
-        if (!payrollRepository.existsById(id)) {
-            throw new RuntimeException("Payroll not found for ID: " + id);
+        Payroll payroll = payrollRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("Payroll not found for ID: " + id));
+        if (payroll.getStatus() == PayrollStatus.PAID) {
+            throw new RuntimeException("Cannot delete a PAID payroll record (ID: " + id + "). Paid payrolls are permanent financial records.");
         }
         payrollRepository.deleteById(id);
     }
