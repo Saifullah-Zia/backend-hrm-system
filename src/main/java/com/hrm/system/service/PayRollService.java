@@ -703,6 +703,36 @@ public class PayRollService {
         dto.setTotalAllowances(payroll.getTotalAllowances());
         dto.setTotalBonuses(payroll.getTotalBonuses());
         dto.setTotalDeductions(payroll.getTotalDeductions());
+
+        // Calculate itemized deductions for breakdown view
+        BigDecimal dailySalaryBd = payroll.getDailySalary() != null ? BigDecimal.valueOf(payroll.getDailySalary()) : BigDecimal.ZERO;
+        int lateDays = payroll.getLateDays() != null ? payroll.getLateDays() : 0;
+        int unpaidLeave = payroll.getUnpaidLeaveDays() != null ? payroll.getUnpaidLeaveDays() : 0;
+        int absentDays = payroll.getAbsentDays() != null ? payroll.getAbsentDays() : 0;
+        BigDecimal grossSalaryBd = payroll.getGrossSalary() != null ? BigDecimal.valueOf(payroll.getGrossSalary()) : BigDecimal.ZERO;
+
+        BigDecimal lateDedBd = payrollCalculationService.applyLatePolicy(lateDays, dailySalaryBd);
+        BigDecimal unpaidDedBd = payrollCalculationService.applyUnpaidLeavePolicy(unpaidLeave, dailySalaryBd);
+        BigDecimal absentDedBd = payrollCalculationService.applyAbsentPolicy(absentDays, dailySalaryBd);
+
+        Double taxDed = null;
+        if (payroll.getPayrollItems() != null && !payroll.getPayrollItems().isEmpty()) {
+            for (PayrollItem item : payroll.getPayrollItems()) {
+                if (item.getType() == PayrollItemType.DEDUCTION && item.getName() != null && item.getName().toLowerCase().contains("tax")) {
+                    taxDed = item.getAmount();
+                    break;
+                }
+            }
+        }
+        if (taxDed == null) {
+            taxDed = payrollCalculationService.calculateIncomeTax(grossSalaryBd).doubleValue();
+        }
+
+        dto.setLateDeduction(lateDedBd.doubleValue());
+        dto.setFbrTaxDeduction(taxDed);
+        dto.setUnpaidLeaveDeduction(unpaidDedBd.doubleValue());
+        dto.setAbsentDeduction(absentDedBd.doubleValue());
+
         dto.setGrossSalary(payroll.getGrossSalary());
         dto.setGeneratedBy(payroll.getGeneratedBy());
         dto.setGeneratedAt(payroll.getGeneratedAt());

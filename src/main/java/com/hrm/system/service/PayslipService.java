@@ -22,6 +22,8 @@ import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.hrm.system.model.PayrollItemType;
+import java.math.BigDecimal;
 import java.io.ByteArrayOutputStream;
 import java.util.HashMap;
 import java.util.List;
@@ -32,11 +34,15 @@ public class PayslipService {
 
     private final PayrollRepository payrollRepository;
     private final PayrollItemRepository payrollItemRepository;
+    private final PayrollCalculationService payrollCalculationService;
 
     @Autowired
-    public PayslipService(PayrollRepository payrollRepository, PayrollItemRepository payrollItemRepository) {
+    public PayslipService(PayrollRepository payrollRepository,
+                          PayrollItemRepository payrollItemRepository,
+                          PayrollCalculationService payrollCalculationService) {
         this.payrollRepository = payrollRepository;
         this.payrollItemRepository = payrollItemRepository;
+        this.payrollCalculationService = payrollCalculationService;
     }
 
     /**
@@ -61,6 +67,27 @@ public class PayslipService {
 
         List<PayrollItem> items = payrollItemRepository.findByPayrollId(payrollId);
 
+        BigDecimal dailySalaryBd = payroll.getDailySalary() != null ? BigDecimal.valueOf(payroll.getDailySalary()) : BigDecimal.ZERO;
+        int lateDays = payroll.getLateDays() != null ? payroll.getLateDays() : 0;
+        BigDecimal grossSalaryBd = payroll.getGrossSalary() != null ? BigDecimal.valueOf(payroll.getGrossSalary()) : BigDecimal.ZERO;
+
+        BigDecimal lateDedBd = payrollCalculationService != null 
+            ? payrollCalculationService.applyLatePolicy(lateDays, dailySalaryBd) 
+            : BigDecimal.ZERO;
+
+        Double taxDed = null;
+        if (items != null) {
+            for (PayrollItem item : items) {
+                if (item.getType() == PayrollItemType.DEDUCTION && item.getName() != null && item.getName().toLowerCase().contains("tax")) {
+                    taxDed = item.getAmount();
+                    break;
+                }
+            }
+        }
+        if (taxDed == null && payrollCalculationService != null) {
+            taxDed = payrollCalculationService.calculateIncomeTax(grossSalaryBd).doubleValue();
+        }
+
         Map<String, Object> payslipData = new HashMap<>();
         payslipData.put("employeeId", payroll.getUser().getId());
         payslipData.put("employeeName", payroll.getUser().getName());
@@ -77,6 +104,8 @@ public class PayslipService {
         payslipData.put("absentDays", payroll.getAbsentDays());
         payslipData.put("totalAllowances", payroll.getTotalAllowances());
         payslipData.put("totalBonuses", payroll.getTotalBonuses());
+        payslipData.put("lateDeduction", lateDedBd.doubleValue());
+        payslipData.put("fbrTaxDeduction", taxDed != null ? taxDed : 0.0);
         payslipData.put("totalDeductions", payroll.getTotalDeductions());
         payslipData.put("grossSalary", payroll.getGrossSalary());
         payslipData.put("netSalary", payroll.getNetSalary());
@@ -138,7 +167,9 @@ public class PayslipService {
         html.append("<p><span class=\"label\">Daily Salary:</span><span class=\"value\">PKR ").append(String.format("%.2f", data.get("dailySalary"))).append("</span></p>\n");
         html.append("<p><span class=\"label\">Total Allowances:</span><span class=\"value\">PKR ").append(String.format("%.2f", data.get("totalAllowances"))).append("</span></p>\n");
         html.append("<p><span class=\"label\">Total Bonuses:</span><span class=\"value\">PKR ").append(String.format("%.2f", data.get("totalBonuses"))).append("</span></p>\n");
-        html.append("<p><span class=\"label\">Total Deductions:</span><span class=\"value\">PKR ").append(String.format("%.2f", data.get("totalDeductions"))).append("</span></p>\n");
+        html.append("<p><span class=\"label\">Late Deduction:</span><span class=\"value\" style=\"color:#dc2626;\">- PKR ").append(String.format("%.2f", data.get("lateDeduction") != null ? data.get("lateDeduction") : 0.0)).append("</span></p>\n");
+        html.append("<p><span class=\"label\">FBR Tax Deduction:</span><span class=\"value\" style=\"color:#dc2626;\">- PKR ").append(String.format("%.2f", data.get("fbrTaxDeduction") != null ? data.get("fbrTaxDeduction") : 0.0)).append("</span></p>\n");
+        html.append("<p><span class=\"label\">Total Deductions:</span><span class=\"value\" style=\"color:#dc2626; font-weight:bold;\">- PKR ").append(String.format("%.2f", data.get("totalDeductions"))).append("</span></p>\n");
         
         List<PayrollItem> items = (List<PayrollItem>) data.get("items");
         if (items != null && !items.isEmpty()) {
@@ -245,8 +276,19 @@ public class PayslipService {
             salaryTable.addCell(createCell("PKR " + String.format("%.2f", data.get("totalAllowances")), font));
             salaryTable.addCell(createCell("Total Bonuses:", boldFont));
             salaryTable.addCell(createCell("PKR " + String.format("%.2f", data.get("totalBonuses")), font));
+
+            salaryTable.addCell(createCell("Late Deduction:", font));
+            Cell lateCell = createCell("- PKR " + String.format("%.2f", data.get("lateDeduction") != null ? data.get("lateDeduction") : 0.0), font);
+            lateCell.setFontColor(ColorConstants.RED);
+            salaryTable.addCell(lateCell);
+
+            salaryTable.addCell(createCell("FBR Tax Deduction:", font));
+            Cell taxCell = createCell("- PKR " + String.format("%.2f", data.get("fbrTaxDeduction") != null ? data.get("fbrTaxDeduction") : 0.0), font);
+            taxCell.setFontColor(ColorConstants.RED);
+            salaryTable.addCell(taxCell);
+
             salaryTable.addCell(createCell("Total Deductions:", boldFont));
-            Cell deductionCell = createCell("- PKR " + String.format("%.2f", data.get("totalDeductions")), font);
+            Cell deductionCell = createCell("- PKR " + String.format("%.2f", data.get("totalDeductions")), boldFont);
             deductionCell.setFontColor(ColorConstants.RED);
             salaryTable.addCell(deductionCell);
 

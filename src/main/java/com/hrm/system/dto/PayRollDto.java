@@ -32,6 +32,10 @@ public class PayRollDto {
     private Double totalAllowances;
     private Double totalBonuses;
     private Double totalDeductions;
+    private Double lateDeduction;
+    private Double fbrTaxDeduction;
+    private Double unpaidLeaveDeduction;
+    private Double absentDeduction;
     private Double grossSalary;
     private Long generatedBy;
     private java.time.LocalDateTime generatedAt;
