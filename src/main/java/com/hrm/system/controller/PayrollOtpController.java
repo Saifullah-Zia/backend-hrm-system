@@ -16,12 +16,39 @@ public class PayrollOtpController {
     @Autowired
     private PayrollOtpService payrollOtpService;
 
+    @Autowired
+    private com.hrm.system.repository.UserRepository userRepository;
+
     private Long getUserIdFromRequest(HttpServletRequest request) {
         Object userId = request.getAttribute("userId");
-        if (userId == null) {
-            throw new RuntimeException("Unauthorized user context");
+        if (userId != null) {
+            return (Long) userId;
         }
-        return (Long) userId;
+
+        try {
+            org.springframework.security.core.Authentication auth = org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication();
+            if (auth != null && auth.isAuthenticated()) {
+                Object principal = auth.getPrincipal();
+                String username = null;
+                if (principal instanceof org.springframework.security.core.userdetails.UserDetails userDetails) {
+                    username = userDetails.getUsername();
+                } else if (principal instanceof String str) {
+                    username = str;
+                }
+
+                if (username != null) {
+                    java.util.Optional<com.hrm.system.model.User> u = userRepository.findByEmail(username);
+                    if (u.isEmpty()) {
+                        u = userRepository.findByName(username);
+                    }
+                    if (u.isPresent()) {
+                        return u.get().getId();
+                    }
+                }
+            }
+        } catch (Exception ignored) {}
+
+        throw new RuntimeException("Unauthorized user context");
     }
 
     @PostMapping("/send")

@@ -52,7 +52,7 @@ public class JwtFilter extends OncePerRequestFilter {
         String path = request.getRequestURI();
         System.out.println("[JwtFilter] Request Path: " + path);
 
-        if (path.startsWith("/api/auth") || path.startsWith("/api/settings/my-ip")) {
+        if ((path.equals("/api/auth/login") || path.equals("/api/auth/register") || path.startsWith("/api/settings/my-ip")) && request.getHeader("Authorization") == null) {
             filterChain.doFilter(request, response);
             return;
         }
