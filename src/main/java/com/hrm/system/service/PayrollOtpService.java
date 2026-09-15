@@ -67,6 +67,21 @@ public class PayrollOtpService {
             throw new RuntimeException(String.format("Too many failed attempts. Payroll access locked for %d minute(s).", remainingMins));
         }
 
+        // Deduplication throttle: If an unexpired code was generated in the last 30 seconds, return success without resending
+        List<LocalDateTime> sends = state.getSendTimestamps();
+        if (!sends.isEmpty()) {
+            LocalDateTime lastSend = sends.get(sends.size() - 1);
+            if (lastSend.isAfter(now.minusSeconds(30)) && state.getCode() != null && state.getExpiry() != null && now.isBefore(state.getExpiry())) {
+                String maskedEmail = maskEmail(user.getEmail());
+                Map<String, Object> response = new HashMap<>();
+                response.put("success", true);
+                response.put("message", "Verification code sent to your email.");
+                response.put("maskedEmail", maskedEmail);
+                response.put("expiresInMinutes", 5);
+                return response;
+            }
+        }
+
         // 2. Rate limiting check: max 3 sends per 10 minutes
         state.getSendTimestamps().removeIf(t -> t.isBefore(now.minusMinutes(10)));
         if (state.getSendTimestamps().size() >= 3) {
