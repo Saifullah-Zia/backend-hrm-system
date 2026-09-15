@@ -586,10 +586,10 @@ public class EmailService {
                         <p>JCAT Solutions HRM Security</p>
                     </div>
                     <div class="content">
-                        <p>Hello <strong>%s</strong>,</p>
+                        <p>Hello <strong>[USER_NAME]</strong>,</p>
                         <p>You requested access to Payroll Processing. Use the 6-digit verification code below to authorize your session:</p>
                         <div class="otp-box">
-                            <div class="otp-code">%s</div>
+                            <div class="otp-code">[OTP_CODE]</div>
                             <div class="otp-label">Verification Code</div>
                         </div>
                         <div class="info">
@@ -602,7 +602,7 @@ public class EmailService {
                 </div>
             </body>
             </html>
-        """.formatted(safeName, code);
+        """.replace("[USER_NAME]", safeName).replace("[OTP_CODE]", code);
 
         String apiKey = System.getenv("RESEND_API_KEY");
         if (apiKey != null && !apiKey.trim().isEmpty()) {
