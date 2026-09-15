@@ -52,7 +52,8 @@ public class JwtFilter extends OncePerRequestFilter {
         String path = request.getRequestURI();
         System.out.println("[JwtFilter] Request Path: " + path);
 
-        if ((path.equals("/api/auth/login") || path.equals("/api/auth/register") || path.startsWith("/api/settings/my-ip")) && request.getHeader("Authorization") == null) {
+        // Only skip JWT processing for truly public endpoints (no Bearer token expected)
+        if ((path.equals("/api/auth/login") || path.equals("/api/auth/register") || path.equals("/api/auth/refresh") || path.startsWith("/api/settings/my-ip")) && request.getHeader("Authorization") == null) {
             filterChain.doFilter(request, response);
             return;
         }
