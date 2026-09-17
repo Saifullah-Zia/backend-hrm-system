@@ -75,7 +75,7 @@ public class AttendanceController {
      * PUT /api/attendance/{id}
      */
     @PutMapping("/{id}")
-    @PreAuthorize("hasRole(ADMIN)")
+    @PreAuthorize("hasAnyRole('ADMIN', 'SUPERADMIN')")
     public ResponseEntity<?> update(@PathVariable Long id,
                                     @RequestBody AttendanceDto dto,
                                     Authentication auth) {
@@ -139,7 +139,7 @@ public class AttendanceController {
     }
 
     @DeleteMapping("/{id}")
-    @PreAuthorize("hasRole(ADMIN)")
+    @PreAuthorize("hasAnyRole('ADMIN', 'SUPERADMIN')")
     public ResponseEntity<?> delete(@PathVariable Long id) {
         try {
             attendanceService.delete(id);

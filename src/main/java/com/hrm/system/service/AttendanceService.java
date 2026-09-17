@@ -66,13 +66,25 @@ public class AttendanceService {
             throw new IllegalArgumentException("userId must not be null");
         }
 
-        Attendance attendance = new Attendance();
-        attendance.setDate(dto.getDate());
-
         User user = userRepository.findById(dto.getUserId())
                 .orElseThrow(() -> new EntityNotFoundException(
                         "User not found with id: " + dto.getUserId()));
+
+        LocalDate targetDate = dto.getDate();
+        if (targetDate == null && dto.getCheckIn() != null) {
+            targetDate = dto.getCheckIn().atZone(AppTimeZone.PKT).toLocalDate();
+        }
+        if (targetDate == null) {
+            targetDate = LocalDate.now(AppTimeZone.PKT);
+        }
+
+        // Check if an attendance record already exists for this user and date (e.g. ABSENT placeholder)
+        Optional<Attendance> existingOpt = attendanceRepository.findByUserIdAndDate(user.getId(), targetDate);
+        Attendance attendance = existingOpt.orElseGet(Attendance::new);
+
+        String oldStatus = attendance.getStatus();
         attendance.setUser(user);
+        attendance.setDate(targetDate);
 
         // Convert checkIn (assumed PKT from frontend) → store as PKT
         if (dto.getCheckIn() != null) {
@@ -82,7 +94,7 @@ public class AttendanceService {
             attendance.setDate(checkInPKT.toLocalDate());
             attendance.setStatus(officeHoursService.calculateStatus(checkInPKT.toLocalTime()));
         } else {
-            attendance.setStatus(dto.getStatus() != null ? dto.getStatus() : "ABSENT");
+            attendance.setStatus(dto.getStatus() != null ? dto.getStatus() : (oldStatus != null ? oldStatus : "ABSENT"));
         }
 
         // Convert checkOut (assumed PKT from frontend) → store as PKT
@@ -94,13 +106,20 @@ public class AttendanceService {
 
         Attendance saved = attendanceRepository.save(attendance);
 
-        // If manually created with status ON_LEAVE, deduct 1 day from employee's leave balance
-        if ("ON_LEAVE".equalsIgnoreCase(saved.getStatus())) {
+        // Adjust leave balance if status transitioned to/from ON_LEAVE
+        String newStatus = saved.getStatus();
+        int year = saved.getDate() != null ? saved.getDate().getYear() : LocalDate.now().getYear();
+
+        if (!"ON_LEAVE".equalsIgnoreCase(oldStatus) && "ON_LEAVE".equalsIgnoreCase(newStatus)) {
             String category = (dto.getLeaveType() != null && !dto.getLeaveType().isBlank())
                     ? dto.getLeaveType().toUpperCase()
                     : "CASUAL";
-            int year = saved.getDate() != null ? saved.getDate().getYear() : LocalDate.now().getYear();
             leaveBalanceService.deductDirectUsedDays(user.getId(), category, 1, year);
+        } else if ("ON_LEAVE".equalsIgnoreCase(oldStatus) && !"ON_LEAVE".equalsIgnoreCase(newStatus)) {
+            String category = (dto.getLeaveType() != null && !dto.getLeaveType().isBlank())
+                    ? dto.getLeaveType().toUpperCase()
+                    : "CASUAL";
+            leaveBalanceService.refundDirectUsedDays(user.getId(), category, 1, year);
         }
 
         return mapToDto(saved);
@@ -121,15 +140,13 @@ public class AttendanceService {
         ZonedDateTime nowPKT  = ZonedDateTime.now(AppTimeZone.PKT);
         LocalDate     todayPKT = nowPKT.toLocalDate();
 
-        // Prevent double check-in on same day
-        boolean alreadyCheckedIn = attendanceRepository
-                .findByUserIdAndDate(userId, todayPKT)
-                .isPresent();
-        if (alreadyCheckedIn) {
+        // Prevent double check-in on same day (only if a real check-in was already recorded)
+        Optional<Attendance> existingOpt = attendanceRepository.findByUserIdAndDate(userId, todayPKT);
+        if (existingOpt.isPresent() && existingOpt.get().getCheckIn() != null) {
             throw new IllegalStateException("Already checked in today");
         }
 
-        Attendance attendance = new Attendance();
+        Attendance attendance = existingOpt.orElseGet(Attendance::new);
         attendance.setUser(user);
         attendance.setDate(todayPKT);
         attendance.setCheckIn(nowPKT.toLocalDateTime());  // stored as PKT
@@ -182,14 +199,12 @@ public class AttendanceService {
         ZonedDateTime nowPKT   = ZonedDateTime.now(AppTimeZone.PKT);
         LocalDate     todayPKT = nowPKT.toLocalDate();
 
-        boolean alreadyCheckedIn = attendanceRepository
-                .findByUserIdAndDate(userId, todayPKT)
-                .isPresent();
-        if (alreadyCheckedIn) {
+        Optional<Attendance> existingOpt = attendanceRepository.findByUserIdAndDate(userId, todayPKT);
+        if (existingOpt.isPresent() && existingOpt.get().getCheckIn() != null) {
             throw new IllegalStateException("Already checked in today");
         }
 
-        Attendance attendance = new Attendance();
+        Attendance attendance = existingOpt.orElseGet(Attendance::new);
         attendance.setUser(user);
         attendance.setDate(todayPKT);
         attendance.setCheckIn(nowPKT.toLocalDateTime());
