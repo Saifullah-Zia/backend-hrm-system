@@ -319,4 +319,102 @@ public class EmployeeProfileService {
         // 3. Profile row
         employeeProfileRepository.delete(profile);
     }
+
+    // ─────────────────────────────────────────────────────
+    // AVATAR UPLOAD & CLEANUP
+    // ─────────────────────────────────────────────────────
+    private static final String AVATAR_UPLOAD_DIR = "uploads/avatars/";
+    private final java.util.Map<Long, java.util.List<java.time.Instant>> uploadTimestamps = new java.util.concurrent.ConcurrentHashMap<>();
+
+    private void checkRateLimit(Long userId) {
+        java.time.Instant now = java.time.Instant.now();
+        java.time.Instant windowStart = now.minusSeconds(300); // 5 minutes
+        java.util.List<java.time.Instant> timestamps = uploadTimestamps.computeIfAbsent(userId, k -> new java.util.concurrent.CopyOnWriteArrayList<>());
+        timestamps.removeIf(t -> t.isBefore(windowStart));
+        if (timestamps.size() >= 10) {
+            throw new ResponseStatusException(HttpStatus.TOO_MANY_REQUESTS, "Upload rate limit exceeded. Please wait a few minutes.");
+        }
+        timestamps.add(now);
+    }
+
+    @Transactional
+    public EmployeeProfileDto uploadAvatar(Long requestingUserId, Long targetUserId, org.springframework.web.multipart.MultipartFile file) {
+        if (requestingUserId == null || targetUserId == null) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "User context required.");
+        }
+
+        User requestingUser = userRepository.findById(requestingUserId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Requesting user not found."));
+
+        User targetUser = userRepository.findById(targetUserId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Target user not found."));
+
+        // Role Hierarchy Guard: ADMIN cannot edit SUPERADMIN avatar
+        if (targetUser.getRole() == com.hrm.system.model.Role.SUPERADMIN
+                && requestingUser.getRole() == com.hrm.system.model.Role.ADMIN
+                && !requestingUserId.equals(targetUserId)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Admins cannot modify SuperAdmin profile pictures.");
+        }
+
+        // Rate limiting
+        checkRateLimit(requestingUserId);
+
+        // Process & validate image (magic bytes, EXIF stripping, resizing to max 512x512)
+        com.hrm.system.util.AvatarImageUtil.ProcessedImage processedImage;
+        try {
+            processedImage = com.hrm.system.util.AvatarImageUtil.validateAndProcessAvatar(file);
+        } catch (IllegalArgumentException e) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage());
+        } catch (Exception e) {
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Failed to process image: " + e.getMessage());
+        }
+
+        // Find or auto-create EmployeeProfile for targetUser
+        EmployeeProfile profile = employeeProfileRepository.findByUserId(targetUserId)
+                .orElseGet(() -> {
+                    EmployeeProfile p = new EmployeeProfile();
+                    p.setUser(targetUser);
+                    String[] nameParts = targetUser.getName() != null ? targetUser.getName().split(" ", 2) : new String[]{"User", ""};
+                    p.setFirstName(nameParts[0]);
+                    p.setLastName(nameParts.length > 1 ? nameParts[1] : "");
+                    p.setEmploymentStatus(com.hrm.system.model.EmploymentStatus.ACTIVE);
+                    return p;
+                });
+
+        // Cleanup old avatar file from disk if present
+        deleteOldAvatarFile(profile.getProfilePicture());
+
+        // Save new avatar file
+        try {
+            java.nio.file.Path uploadDir = java.nio.file.Paths.get(AVATAR_UPLOAD_DIR);
+            if (!java.nio.file.Files.exists(uploadDir)) {
+                java.nio.file.Files.createDirectories(uploadDir);
+            }
+            String fileName = "avatar_" + targetUserId + "_" + java.util.UUID.randomUUID() + processedImage.extension();
+            java.nio.file.Path filePath = uploadDir.resolve(fileName);
+            java.nio.file.Files.write(filePath, processedImage.data());
+
+            String avatarUrl = "/api/employee-profiles/avatars/" + fileName;
+            profile.setProfilePicture(avatarUrl);
+            EmployeeProfile saved = employeeProfileRepository.save(profile);
+
+            return toDto(saved, true);
+        } catch (Exception e) {
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Failed to save avatar image: " + e.getMessage());
+        }
+    }
+
+    private void deleteOldAvatarFile(String oldUrl) {
+        if (oldUrl == null || !oldUrl.startsWith("/api/employee-profiles/avatars/")) {
+            return;
+        }
+        try {
+            String fileName = oldUrl.substring("/api/employee-profiles/avatars/".length());
+            String safeFileName = java.nio.file.Paths.get(fileName).getFileName().toString();
+            java.nio.file.Path oldPath = java.nio.file.Paths.get(AVATAR_UPLOAD_DIR).resolve(safeFileName);
+            java.nio.file.Files.deleteIfExists(oldPath);
+        } catch (Exception e) {
+            System.err.println("Warning: Failed to delete old avatar file: " + e.getMessage());
+        }
+    }
 }

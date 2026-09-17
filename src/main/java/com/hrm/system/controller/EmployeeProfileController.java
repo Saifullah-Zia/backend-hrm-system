@@ -108,9 +108,58 @@ public class EmployeeProfileController {
     }
 
     @GetMapping("/me")
-    @PreAuthorize("hasAnyRole('EMPLOYEE', 'ADMIN')")
+    @PreAuthorize("hasAnyRole('EMPLOYEE', 'ADMIN', 'SUPERADMIN')")
     public ResponseEntity<EmployeeProfileDto> getMyProfile() {
         return ResponseEntity.ok(employeeProfileService.getMe());
+    }
+
+    // ── Avatar Upload & File Serving Endpoints ────────────────────────────────
+
+    @PostMapping(value = "/me/avatar", consumes = org.springframework.http.MediaType.MULTIPART_FORM_DATA_VALUE)
+    @PreAuthorize("hasAnyRole('EMPLOYEE', 'ADMIN', 'SUPERADMIN')")
+    public ResponseEntity<EmployeeProfileDto> uploadMyAvatar(
+            @RequestParam("file") org.springframework.web.multipart.MultipartFile file,
+            HttpServletRequest request) {
+        Long userId = (Long) request.getAttribute("userId");
+        return ResponseEntity.ok(employeeProfileService.uploadAvatar(userId, userId, file));
+    }
+
+    @PostMapping(value = "/{userId}/avatar", consumes = org.springframework.http.MediaType.MULTIPART_FORM_DATA_VALUE)
+    @PreAuthorize("hasAnyRole('ADMIN', 'SUPERADMIN')")
+    public ResponseEntity<EmployeeProfileDto> uploadUserAvatar(
+            @PathVariable Long userId,
+            @RequestParam("file") org.springframework.web.multipart.MultipartFile file,
+            HttpServletRequest request) {
+        Long requestingUserId = (Long) request.getAttribute("userId");
+        return ResponseEntity.ok(employeeProfileService.uploadAvatar(requestingUserId, userId, file));
+    }
+
+    @GetMapping("/avatars/{fileName}")
+    public ResponseEntity<byte[]> serveAvatar(@PathVariable String fileName) throws java.io.IOException {
+        // Path Traversal Security Check: sanitize fileName
+        if (fileName == null || fileName.contains("..") || fileName.contains("/") || fileName.contains("\\")) {
+            return ResponseEntity.badRequest().build();
+        }
+        String safeName = java.nio.file.Paths.get(fileName).getFileName().toString();
+        if (!safeName.matches("^[a-zA-Z0-9_\\-]+\\.(jpg|jpeg|png|webp)$")) {
+            return ResponseEntity.badRequest().build();
+        }
+
+        java.nio.file.Path filePath = java.nio.file.Paths.get("uploads/avatars/").resolve(safeName);
+        if (!java.nio.file.Files.exists(filePath)) {
+            return ResponseEntity.notFound().build();
+        }
+
+        byte[] data = java.nio.file.Files.readAllBytes(filePath);
+        String mimeType = java.nio.file.Files.probeContentType(filePath);
+        if (mimeType == null) {
+            mimeType = safeName.endsWith(".png") ? "image/png" : "image/jpeg";
+        }
+
+        return ResponseEntity.ok()
+                .contentType(org.springframework.http.MediaType.parseMediaType(mimeType))
+                .header(org.springframework.http.HttpHeaders.CACHE_CONTROL, "public, max-age=86400")
+                .body(data);
     }
 
     // ── Salary OTP endpoints ──────────────────────────────────────────────────
