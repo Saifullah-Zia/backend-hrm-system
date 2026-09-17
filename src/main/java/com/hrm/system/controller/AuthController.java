@@ -55,10 +55,10 @@ public class AuthController {
         User user = authService.authenticate(request.getEmail(), request.getPassword(), clientIp);
 
         String accessToken  = jwtUtil.generateToken(
-                user.getName(), user.getRole().name(), user.getId(), user.getEmail());
+                user.getEmail(), user.getRole().name(), user.getId(), user.getEmail());
 
         String refreshToken = jwtUtil.generateRefreshToken(
-                user.getName(), user.getRole().name(), user.getId(), user.getEmail());
+                user.getEmail(), user.getRole().name(), user.getId(), user.getEmail());
 
         Map<String, Object> response = new HashMap<>();
         response.put("accessToken",  accessToken);

@@ -169,13 +169,16 @@ public class EmployeeProfileService {
         if (auth == null || !auth.isAuthenticated())
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Not authenticated");
 
-        String email = ((UserDetails) auth.getPrincipal()).getUsername();
+        String identifier = ((UserDetails) auth.getPrincipal()).getUsername();
 
-        User user = userRepository.findByEmailIgnoreCase(email != null ? email.trim() : "")
-                .orElseThrow(() -> new ResponseStatusException(
-                        HttpStatus.UNAUTHORIZED, "User not found"));
+        User user = userRepository.findByEmailIgnoreCase(identifier != null ? identifier.trim() : "")
+                .orElseGet(() -> userRepository.findByName(identifier != null ? identifier.trim() : "")
+                        .orElseThrow(() -> new ResponseStatusException(
+                                HttpStatus.UNAUTHORIZED, "User not found")));
 
-        return getByUserId(user.getId(), true); // Employees fetching their own profile can always see their own salary
+        return employeeProfileRepository.findByUserId(user.getId())
+                .map(p -> toDto(p, true))
+                .orElse(null);
     }
 
 

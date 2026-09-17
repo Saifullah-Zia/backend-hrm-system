@@ -50,7 +50,6 @@ public class JwtFilter extends OncePerRequestFilter {
     ) throws ServletException, IOException {
 
         String path = request.getRequestURI();
-        System.out.println("[JwtFilter] Request Path: " + path);
 
         // Only skip JWT processing for truly public endpoints (no Bearer token expected)
         if ((path.equals("/api/auth/login") || path.equals("/api/auth/register") || path.equals("/api/auth/refresh") || path.startsWith("/api/settings/my-ip")) && request.getHeader("Authorization") == null) {
@@ -60,22 +59,18 @@ public class JwtFilter extends OncePerRequestFilter {
 
         try {
             String authHeader = request.getHeader("Authorization");
-            System.out.println("[JwtFilter] Authorization Header: " + (authHeader != null ? "Present (Length: " + authHeader.length() + ")" : "NULL"));
 
             if (authHeader != null && authHeader.startsWith("Bearer ")) {
                 String token = authHeader.substring(7);
                 String username = jwtUtil.extractUsername(token);
-                System.out.println("[JwtFilter] Username extracted: " + username);
 
                 if (username != null && SecurityContextHolder.getContext().getAuthentication() == null) {
                     boolean isValid = jwtUtil.validateToken(token);
-                    System.out.println("[JwtFilter] Is token valid: " + isValid);
 
                     if (isValid) {
                         UserDetails userDetails = userService.loadUserByUsername(username);
 
                         String role = jwtUtil.extractRole(token);
-                        System.out.println("[JwtFilter] Role extracted: " + role);
 
                         // ✅ Location / Office Wi-Fi access restriction for employees
                         if (userDetails instanceof com.hrm.system.security.CustomUserDetails) {
@@ -88,7 +83,6 @@ public class JwtFilter extends OncePerRequestFilter {
                             boolean isOffice = isOfficeIp(clientIp);
 
                             if (!isPrivileged && !isRemoteAllowed && !isOffice) {
-                                System.out.println("[JwtFilter] Blocked employee " + username + " from IP " + clientIp + " (Outside Office Wi-Fi)");
                                 sendError(response, HttpServletResponse.SC_FORBIDDEN,
                                         "HRM access is restricted to Office Wi-Fi. Please connect to Office Wi-Fi or request remote access from HR.");
                                 return;
@@ -113,13 +107,8 @@ public class JwtFilter extends OncePerRequestFilter {
                                 );
 
                         SecurityContextHolder.getContext().setAuthentication(authToken);
-                        System.out.println("[JwtFilter] Authentication successfully set in SecurityContextHolder for user: " + username);
-                    } else {
-                        System.out.println("[JwtFilter] Token validation failed, skipping setting authentication.");
                     }
                 }
-            } else {
-                System.out.println("[JwtFilter] Authorization header is missing or does not start with 'Bearer '");
             }
         } catch (ExpiredJwtException e) {
             System.out.println("[JwtFilter] ExpiredJwtException: " + e.getMessage());

@@ -12,6 +12,7 @@ public class CustomUserDetails implements UserDetails {
 
     private final Long id;
     private final String username;
+    private final String name;
     private final String password;
     private final List<GrantedAuthority> authorities;
     private final User user;
@@ -19,7 +20,8 @@ public class CustomUserDetails implements UserDetails {
     public CustomUserDetails(User user) {
         this.user = user;
         this.id = user.getId();
-        this.username = user.getName();
+        this.username = (user.getEmail() != null && !user.getEmail().isBlank()) ? user.getEmail() : user.getName();
+        this.name = user.getName();
         this.password = user.getPassword();
         this.authorities = List.of(new SimpleGrantedAuthority("ROLE_" + user.getRole().name()));
     }
@@ -30,6 +32,10 @@ public class CustomUserDetails implements UserDetails {
 
     public Long getId() {
         return id;
+    }
+
+    public String getName() {
+        return name;
     }
 
     @Override

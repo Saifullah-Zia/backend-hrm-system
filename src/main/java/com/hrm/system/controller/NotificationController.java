@@ -28,40 +28,29 @@ public class NotificationController {
             Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
             if (authentication != null && authentication.isAuthenticated()) {
                 Object principal = authentication.getPrincipal();
+                if (principal instanceof com.hrm.system.security.CustomUserDetails customUser) {
+                    return customUser.getId();
+                }
                 String username = null;
-
                 if (principal instanceof UserDetails userDetails) {
                     username = userDetails.getUsername();
-                    System.out.println("🔍 Principal is UserDetails, username: " + username);
                 } else if (principal instanceof String) {
                     username = (String) principal;
-                    System.out.println("🔍 Principal is String, username: " + username);
                 }
 
                 if (username != null) {
-                    // Try finding by email first
-                    Optional<User> user = userRepository.findByEmail(username);
+                    Optional<User> user = userRepository.findByEmailIgnoreCase(username.trim());
                     if (user.isEmpty()) {
-                        System.out.println("🔍 Trying to find by name: " + username);
-                        user = userRepository.findByName(username);
+                        user = userRepository.findByName(username.trim());
                     }
 
                     if (user.isPresent()) {
-                        System.out.println("✅ Found user: " + user.get().getName() + " with ID: " + user.get().getId());
                         return user.get().getId();
-                    } else {
-                        System.err.println("❌ User not found in DB for username: " + username);
                     }
-                } else {
-                    System.err.println("❌ Principal is not UserDetails or String: " + principal);
-                    System.err.println("Principal class: " + (principal != null ? principal.getClass() : "null"));
                 }
-            } else {
-                System.err.println("❌ No authentication found in SecurityContext");
             }
         } catch (Exception e) {
             System.err.println("❌ Error getting current user: " + e.getMessage());
-            e.printStackTrace();
         }
 
         return null;
