@@ -24,7 +24,7 @@ public class AuditLogController {
 
     // Paged, filtered audit log for HR/Admin dashboard
     @GetMapping
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'SUPERADMIN')")
     public ResponseEntity<Page<AuditLogDto.Response>> getFiltered(
             @RequestParam(required = false) String entityName,
             @RequestParam(required = false) AuditAction action,
@@ -47,7 +47,7 @@ public class AuditLogController {
     // GET /api/audit-logs/entity/{entityName}/{entityId}
     // Full change history of one record (e.g. Payroll#42)
     @GetMapping("/entity/{entityName}/{entityId}")
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'SUPERADMIN')")
     public ResponseEntity<List<AuditLogDto.Response>> getEntityHistory(
             @PathVariable String entityName,
             @PathVariable Long   entityId) {
@@ -58,7 +58,7 @@ public class AuditLogController {
     // GET /api/audit-logs/user/{userId}
     // All actions performed by a specific user
     @GetMapping("/user/{userId}")
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'SUPERADMIN')")
     public ResponseEntity<Page<AuditLogDto.Response>> getUserActivity(
             @PathVariable Long userId,
             @PageableDefault(size = 20, sort = "createdAt") Pageable pageable) {
