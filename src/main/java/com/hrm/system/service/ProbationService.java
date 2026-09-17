@@ -47,15 +47,33 @@ public class ProbationService {
                 .build();
     }
 
+    @Transactional
+    public void cleanupAdminProbations() {
+        List<User> admins = userRepository.findAll().stream()
+                .filter(u -> u.getRole() == Role.ADMIN || u.getRole() == Role.SUPERADMIN)
+                .filter(u -> u.getProbationStatus() != null || u.getProbationStartDate() != null || u.getProbationEndDate() != null)
+                .collect(Collectors.toList());
+        for (User admin : admins) {
+            admin.setProbationStatus(null);
+            admin.setProbationStartDate(null);
+            admin.setProbationEndDate(null);
+            admin.setProbationNotificationSent(false);
+            userRepository.save(admin);
+        }
+    }
+
     // ─────────────────────────────────────────────────────
     // GET all users ON_PROBATION
     // ─────────────────────────────────────────────────────
     @Transactional
     public List<ProbationDto.Response> getOnProbation() {
+        cleanupAdminProbations();
         syncProbationFromProfilesIfNeeded(employeeProfileRepository.findAllWithUsers());
         updateCompletedProbationsInline();
         return userRepository.findByProbationStatus(ProbationStatus.ON_PROBATION)
-                .stream().map(this::mapToResponse)
+                .stream()
+                .filter(u -> u.getRole() != Role.ADMIN && u.getRole() != Role.SUPERADMIN)
+                .map(this::mapToResponse)
                 .collect(Collectors.toList());
     }
 
@@ -64,10 +82,13 @@ public class ProbationService {
     // ─────────────────────────────────────────────────────
     @Transactional
     public List<ProbationDto.Response> getAwaitingConfirmation() {
+        cleanupAdminProbations();
         syncProbationFromProfilesIfNeeded(employeeProfileRepository.findAllWithUsers());
         updateCompletedProbationsInline();
         return userRepository.findByProbationStatus(ProbationStatus.COMPLETED)
-                .stream().map(this::mapToResponse)
+                .stream()
+                .filter(u -> u.getRole() != Role.ADMIN && u.getRole() != Role.SUPERADMIN)
+                .map(this::mapToResponse)
                 .collect(Collectors.toList());
     }
 
@@ -76,7 +97,9 @@ public class ProbationService {
     // ─────────────────────────────────────────────────────
     public List<ProbationDto.Response> getConfirmed() {
         return userRepository.findByProbationStatus(ProbationStatus.CONFIRMED)
-                .stream().map(this::mapToResponse)
+                .stream()
+                .filter(u -> u.getRole() != Role.ADMIN && u.getRole() != Role.SUPERADMIN)
+                .map(this::mapToResponse)
                 .collect(Collectors.toList());
     }
 
@@ -85,6 +108,9 @@ public class ProbationService {
     // ─────────────────────────────────────────────────────
     @Transactional
     public void startProbation(User user, LocalDate joiningDate) {
+        if (user == null || user.getRole() == Role.ADMIN || user.getRole() == Role.SUPERADMIN) {
+            return;
+        }
         if (joiningDate == null) {
             // Probation is tied to joining date — wait until employee profile provides it.
             return;
@@ -97,7 +123,21 @@ public class ProbationService {
      */
     @Transactional
     public void applyProbationFromJoiningDate(User user, LocalDate joiningDate) {
-        if (joiningDate == null || user == null) {
+        if (user == null) {
+            return;
+        }
+        // ADMIN / SUPERADMIN are never on probation — clear any probation fields and return
+        if (user.getRole() == Role.ADMIN || user.getRole() == Role.SUPERADMIN) {
+            if (user.getProbationStatus() != null || user.getProbationStartDate() != null || user.getProbationEndDate() != null) {
+                user.setProbationStartDate(null);
+                user.setProbationEndDate(null);
+                user.setProbationStatus(null);
+                user.setProbationNotificationSent(false);
+                userRepository.save(user);
+            }
+            return;
+        }
+        if (joiningDate == null) {
             return;
         }
         if (user.getProbationStatus() == ProbationStatus.CONFIRMED) {
@@ -128,6 +168,9 @@ public class ProbationService {
                 continue;
             }
             User user = profile.getUser();
+            if (user.getRole() == Role.ADMIN || user.getRole() == Role.SUPERADMIN) {
+                continue;
+            }
             if (user.getProbationStatus() == ProbationStatus.CONFIRMED) {
                 continue;
             }
@@ -143,6 +186,9 @@ public class ProbationService {
                 continue;
             }
             User user = profile.getUser();
+            if (user.getRole() == Role.ADMIN || user.getRole() == Role.SUPERADMIN) {
+                continue;
+            }
             if (user.getProbationStatus() == ProbationStatus.CONFIRMED) {
                 continue;
             }

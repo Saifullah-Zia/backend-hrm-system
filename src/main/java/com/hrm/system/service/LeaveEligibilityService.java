@@ -51,7 +51,7 @@ public class LeaveEligibilityService {
 
     /** Check if user is currently on probation. */
     public boolean isOnProbation(User user) {
-        if (user == null) {
+        if (user == null || user.getRole() == com.hrm.system.model.Role.ADMIN || user.getRole() == com.hrm.system.model.Role.SUPERADMIN) {
             return false;
         }
         LocalDate now = LocalDate.now();
