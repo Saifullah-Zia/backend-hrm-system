@@ -13,7 +13,7 @@ RUN ./mvnw dependency:go-offline -B
 
 # Copy source code and build app using cached dependencies
 COPY src src
-RUN ./mvnw package -DskipTests -B -o
+RUN ./mvnw package -DskipTests -B
 
 # Run stage (lightweight JRE image)
 FROM eclipse-temurin:21-jre
