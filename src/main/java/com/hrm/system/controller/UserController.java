@@ -35,6 +35,23 @@ public class UserController {
         return new ResponseEntity<>(userService.createUser(user), HttpStatus.CREATED);
     }
 
+    // ─── Get current logged-in user details & permissions ────────────────
+    @GetMapping("/me")
+    @PreAuthorize("hasRole('SUPERADMIN') or hasRole('ADMIN') or hasRole('EMPLOYEE')")
+    public ResponseEntity<UserDTO> getMyUser(jakarta.servlet.http.HttpServletRequest request) {
+        Long userId = (Long) request.getAttribute("userId");
+        if (userId == null) {
+            org.springframework.security.core.Authentication auth = org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication();
+            if (auth != null && auth.getPrincipal() instanceof com.hrm.system.security.CustomUserDetails customUser) {
+                userId = customUser.getId();
+            }
+        }
+        if (userId == null) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+        }
+        return ResponseEntity.ok(userService.getUserById(userId));
+    }
+
     // ─── Get all users ────────────────────────────────────────────────────
     @GetMapping
     @PreAuthorize("hasRole('SUPERADMIN') or hasRole('ADMIN')")

@@ -61,12 +61,14 @@ public class AuthController {
                 user.getEmail(), user.getRole().name(), user.getId(), user.getEmail());
 
         Map<String, Object> response = new HashMap<>();
-        response.put("accessToken",  accessToken);
-        response.put("refreshToken", refreshToken);
-        response.put("userId",       user.getId());
-        response.put("role",         user.getRole().name());
-        response.put("name",         user.getName());
-        response.put("email",        user.getEmail());
+        response.put("accessToken",          accessToken);
+        response.put("refreshToken",         refreshToken);
+        response.put("userId",               user.getId());
+        response.put("role",                 user.getRole().name());
+        response.put("name",                 user.getName());
+        response.put("email",                user.getEmail());
+        response.put("webCheckInAllowed",    user.isWebCheckInAllowed());
+        response.put("outsideAccessAllowed", user.isOutsideAccessAllowed());
 
         return ResponseEntity.ok(response);
     }
