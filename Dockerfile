@@ -1,26 +1,23 @@
-# Build stage
-FROM eclipse-temurin:21-jdk AS build
+# ── Stage 1: Dependency cache ────────────────────────────────────────────────
+# Only re-runs when pom.xml changes — keeps deps layer cached on source changes
+FROM eclipse-temurin:17-jdk-alpine AS deps
 WORKDIR /app
 
-# Copy wrapper and pom first to cache dependencies
 COPY mvnw .
 COPY .mvn .mvn
 COPY pom.xml .
-RUN chmod +x mvnw
+RUN chmod +x mvnw && ./mvnw dependency:go-offline -B --no-transfer-progress
 
-# Pre-download dependencies (cached layer unless pom.xml changes)
-RUN ./mvnw dependency:go-offline -B
-
-# Copy source code and build app using cached dependencies
+# ── Stage 2: Build ────────────────────────────────────────────────────────────
+FROM deps AS build
 COPY src src
-RUN ./mvnw package -DskipTests -B
+RUN ./mvnw package -DskipTests -B --no-transfer-progress
 
-# Run stage (lightweight JRE image)
-FROM eclipse-temurin:21-jre
+# ── Stage 3: Runtime (minimal Alpine JRE) ────────────────────────────────────
+FROM eclipse-temurin:17-jre-alpine
 WORKDIR /app
 
 COPY --from=build /app/target/*.jar app.jar
 
 EXPOSE 8080
 ENTRYPOINT ["java", "-XX:+UseG1GC", "-XX:MaxRAMPercentage=75.0", "-jar", "app.jar"]
-
