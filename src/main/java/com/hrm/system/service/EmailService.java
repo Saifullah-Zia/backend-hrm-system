@@ -28,7 +28,14 @@ public class EmailService {
     @Value("${spring.mail.username}")
     private String fromEmail;
 
-    private final RestTemplate restTemplate = new RestTemplate();
+    private final RestTemplate restTemplate = createRestTemplate();
+
+    private static RestTemplate createRestTemplate() {
+        var factory = new org.springframework.http.client.SimpleClientHttpRequestFactory();
+        factory.setConnectTimeout(5000);
+        factory.setReadTimeout(10000);
+        return new RestTemplate(factory);
+    }
 
     // Send simple text emails
     public void sendSimpleMessage(String toEmail, String subject, String text) {
