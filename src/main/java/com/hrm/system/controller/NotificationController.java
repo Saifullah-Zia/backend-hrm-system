@@ -91,6 +91,37 @@ public class NotificationController {
         System.out.println("✅ Marked notification " + id + " as read for userId: " + userId);
         return ResponseEntity.ok().build();
     }
+    // Unread badge counts for the employee sidebar (My Notices / My Payslips)
+    @GetMapping("/unread/badges")
+    public ResponseEntity<Map<String, Long>> getEmployeeBadgeCounts() {
+        Long userId = getCurrentUserId();
+        if (userId == null) {
+            return ResponseEntity.status(401).build();
+        }
+        return ResponseEntity.ok(notificationService.getEmployeeBadgeCounts(userId));
+    }
+
+    // Called when the employee opens "My Notices"
+    @PutMapping("/read/notices")
+    public ResponseEntity<Void> markNoticesAsRead() {
+        Long userId = getCurrentUserId();
+        if (userId == null) {
+            return ResponseEntity.status(401).build();
+        }
+        notificationService.markNoticesAsRead(userId);
+        return ResponseEntity.ok().build();
+    }
+
+    // Called when the employee opens "My Payslips"
+    @PutMapping("/read/payslips")
+    public ResponseEntity<Void> markPayslipsAsRead() {
+        Long userId = getCurrentUserId();
+        if (userId == null) {
+            return ResponseEntity.status(401).build();
+        }
+        notificationService.markPayslipsAsRead(userId);
+        return ResponseEntity.ok().build();
+    }
 
     @PutMapping("/read/all")
     public ResponseEntity<Void> markAllAsRead() {

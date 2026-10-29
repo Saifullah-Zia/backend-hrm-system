@@ -1,6 +1,10 @@
 package com.hrm.system.service;
 
 import com.hrm.system.dto.NotificationDto;
+import com.hrm.system.model.PayrollStatus;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.Set;
 import com.hrm.system.model.Notification;
 import com.hrm.system.repository.NotificationRepository;
 import com.hrm.system.repository.UserRepository;
@@ -70,6 +74,34 @@ public class NotificationService {
     @Transactional
     public void markAllAsRead(Long userId) {
         notificationRepository.markAllAsRead(userId);
+    }
+    // ── Employee sidebar badges ──────────────────────────────────────────────
+
+    public static final String TYPE_NOTICE = "NOTICE_RECEIVED";
+    public static final String TYPE_PAYROLL = "PAYROLL";
+
+    /** Statuses an employee is allowed to see on the My Payslips page. */
+    private static final Set<PayrollStatus> EMPLOYEE_VISIBLE_PAYROLL_STATUSES =
+            Set.of(PayrollStatus.APPROVED, PayrollStatus.PAID);
+
+    public Map<String, Long> getEmployeeBadgeCounts(Long userId) {
+        Long notices = notificationRepository.countDistinctUnreadReferencesByType(userId, TYPE_NOTICE);
+        Long payslips = notificationRepository.countUnreadPayslips(userId, EMPLOYEE_VISIBLE_PAYROLL_STATUSES);
+
+        Map<String, Long> counts = new HashMap<>();
+        counts.put("notices", notices != null ? notices : 0L);
+        counts.put("payslips", payslips != null ? payslips : 0L);
+        return counts;
+    }
+
+    @Transactional
+    public void markNoticesAsRead(Long userId) {
+        notificationRepository.markAllAsReadByType(userId, TYPE_NOTICE);
+    }
+
+    @Transactional
+    public void markPayslipsAsRead(Long userId) {
+        notificationRepository.markAllAsReadByType(userId, TYPE_PAYROLL);
     }
 
     private NotificationDto convertToDto(Notification notification) {
