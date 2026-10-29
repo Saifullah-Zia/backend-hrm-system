@@ -165,18 +165,6 @@ public class PayRollService {
                         employee.getName(), payrollPeriod.getMonth(), payrollPeriod.getYear(), netSalaryBd.doubleValue()),
                 generatedBy);
 
-        // Publish event for AFTER_COMMIT async email notification
-        eventPublisher.publishEvent(PayrollNotificationEvent.builder()
-                .type(PayrollNotificationEvent.NotificationType.GENERATED)
-                .payrollId(saved.getId())
-                .employeeId(employee.getId())
-                .employeeName(employee.getName())
-                .employeeEmail(employee.getEmail())
-                .month(payrollPeriod.getMonth())
-                .year(payrollPeriod.getYear())
-                .netSalary(netSalaryBd)
-                .build());
-
         return mapToDto(saved);
     }
 
@@ -275,19 +263,6 @@ public class PayRollService {
                         payroll.getUser().getName(), saved.getNetSalary()),
                 approvedBy);
 
-        BigDecimal netSalaryBd = saved.getNetSalary() != null ? BigDecimal.valueOf(saved.getNetSalary()) : BigDecimal.ZERO;
-        // Publish event for AFTER_COMMIT async email notification
-        eventPublisher.publishEvent(PayrollNotificationEvent.builder()
-                .type(PayrollNotificationEvent.NotificationType.APPROVED)
-                .payrollId(saved.getId())
-                .employeeId(payroll.getUser().getId())
-                .employeeName(payroll.getUser().getName())
-                .employeeEmail(payroll.getUser().getEmail())
-                .month(payroll.getPayrollPeriod().getMonth())
-                .year(payroll.getPayrollPeriod().getYear())
-                .netSalary(netSalaryBd)
-                .build());
-
         return mapToDto(saved);
     }
 
@@ -320,6 +295,19 @@ public class PayRollService {
                 String.format("Payroll marked as PAID for %s — net: %.2f",
                         payroll.getUser().getName(), saved.getNetSalary()),
                 payroll.getApprovedBy() != null ? payroll.getApprovedBy() : payroll.getGeneratedBy());
+
+        // Email the employee ONLY now that the payroll is PAID (sent AFTER_COMMIT, async)
+        BigDecimal paidNetSalaryBd = saved.getNetSalary() != null ? BigDecimal.valueOf(saved.getNetSalary()) : BigDecimal.ZERO;
+        eventPublisher.publishEvent(PayrollNotificationEvent.builder()
+                .type(PayrollNotificationEvent.NotificationType.PAID)
+                .payrollId(saved.getId())
+                .employeeId(payroll.getUser().getId())
+                .employeeName(payroll.getUser().getName())
+                .employeeEmail(payroll.getUser().getEmail())
+                .month(payroll.getPayrollPeriod().getMonth())
+                .year(payroll.getPayrollPeriod().getYear())
+                .netSalary(paidNetSalaryBd)
+                .build());
 
         return mapToDto(saved);
     }
@@ -445,14 +433,7 @@ public class PayRollService {
                     saved.getId()
             );
 
-            try {
-                String monthStr = String.format("%d-%02d", year, month);
-                emailService.sendPayrollNotification(employee.getEmail(), monthStr, year);
-                System.out.println("✓ Email sent successfully to: " + employee.getEmail());
-            } catch (Exception e) {
-                System.err.println("✗ Email failed for: " + employee.getEmail());
-                e.printStackTrace();
-            }
+            // No email here — employees are emailed only when payroll is marked PAID.
         }
     }
 
@@ -484,13 +465,7 @@ public class PayRollService {
                 saved.getId()
         );
 
-        try {
-            emailService.sendPayrollNotification(user.getEmail(), dto.getMonth(), Integer.parseInt(dto.getMonth().split("-")[0]));
-            System.out.println("✓ Email sent successfully to: " + user.getEmail());
-        } catch (Exception e) {
-            System.err.println("✗ Email failed for: " + user.getEmail());
-            e.printStackTrace();
-        }
+        // No email here — employees are emailed only when payroll is marked PAID.
 
         return mapToDto(saved);
     }

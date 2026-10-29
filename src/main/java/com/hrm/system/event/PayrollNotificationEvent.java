@@ -13,7 +13,8 @@ public class PayrollNotificationEvent {
 
     public enum NotificationType {
         GENERATED,
-        APPROVED
+        APPROVED,
+        PAID
     }
 
     private final NotificationType type;

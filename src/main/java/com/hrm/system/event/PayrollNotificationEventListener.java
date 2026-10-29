@@ -29,25 +29,21 @@ public class PayrollNotificationEventListener {
                 return;
             }
 
-            if (event.getType() == PayrollNotificationEvent.NotificationType.GENERATED) {
-                emailService.sendPayrollNotification(
-                        event.getEmployeeEmail(),
-                        event.getEmployeeName(),
-                        event.getMonth(),
-                        event.getYear(),
-                        event.getNetSalary(),
-                        event.getEmployeeId()
-                );
-            } else if (event.getType() == PayrollNotificationEvent.NotificationType.APPROVED) {
-                emailService.sendPayrollApprovedNotification(
-                        event.getEmployeeEmail(),
-                        event.getEmployeeName(),
-                        event.getMonth(),
-                        event.getYear(),
-                        event.getNetSalary(),
-                        event.getEmployeeId()
-                );
+            // Employees are emailed ONLY when the payroll is marked PAID.
+            // GENERATED (draft) and APPROVED events are intentionally ignored.
+            if (event.getType() != PayrollNotificationEvent.NotificationType.PAID) {
+                log.debug("Skipping payroll email for event type {} (emails are sent only on PAID)", event.getType());
+                return;
             }
+
+            emailService.sendPayrollPaidNotification(
+                    event.getEmployeeEmail(),
+                    event.getEmployeeName(),
+                    event.getMonth(),
+                    event.getYear(),
+                    event.getNetSalary(),
+                    event.getEmployeeId()
+            );
         } catch (Exception ex) {
             log.error("✗ Failed to send payroll notification email to {} (Employee ID {}): {}",
                     event != null ? event.getEmployeeEmail() : "unknown",

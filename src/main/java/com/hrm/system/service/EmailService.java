@@ -236,6 +236,76 @@ public class EmailService {
         }
     }
 
+    // Send Payroll Paid Notification (the ONLY payroll email sent to employees)
+    public void sendPayrollPaidNotification(String toEmail, String employeeName, String month, Integer year, BigDecimal netSalary, Long employeeId) {
+        if (toEmail == null || toEmail.trim().isEmpty()) {
+            log.warn("⚠️ Cannot send payroll paid notification: Employee ID {} ({}) has no email address configured.",
+                    employeeId, employeeName);
+            return;
+        }
+
+        String safeName = HtmlUtils.htmlEscape(employeeName != null ? employeeName : "Employee");
+        String safeMonth = HtmlUtils.htmlEscape(month != null ? month : "");
+        int safeYear = year != null ? year : 2026;
+        String salaryStr = netSalary != null ? netSalary.setScale(2, RoundingMode.HALF_UP).toString() : "0.00";
+
+        String htmlContent = """
+            <!DOCTYPE html>
+            <html>
+            <head><style>
+                body { font-family: Arial, sans-serif; background-color: #f3f4f6; margin: 0; padding: 0; }
+                .container { max-width: 600px; margin: 20px auto; background-color: #ffffff; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
+                .header { background-color: #16A34A; color: white; padding: 24px; text-align: center; }
+                .header h2 { margin: 0; font-size: 22px; }
+                .content { padding: 24px; background-color: #ffffff; color: #374151; }
+                .salary-box { background-color: #f0fdf4; border-left: 4px solid #16A34A; padding: 16px; margin: 16px 0; border-radius: 4px; }
+                .salary-amount { font-size: 24px; font-weight: bold; color: #16A34A; margin-top: 4px; }
+                .footer { text-align: center; padding: 16px; font-size: 12px; color: #6b7280; background-color: #f9fafb; border-top: 1px solid #f3f4f6; }
+            </style></head>
+            <body>
+                <div class="container">
+                    <div class="header">
+                        <h2>💰 Salary Paid</h2>
+                    </div>
+                    <div class="content">
+                        <p>Dear <strong>%s</strong>,</p>
+                        <p>Your salary for <strong>%s %d</strong> has been <strong>paid</strong>.</p>
+                        <div class="salary-box">
+                            <div>Net Salary Paid:</div>
+                            <div class="salary-amount">PKR %s</div>
+                        </div>
+                        <p>Please login to the HRM system to view your full payslip breakdown.</p>
+                        <p>Regards,<br><strong>HR Department</strong></p>
+                    </div>
+                    <div class="footer">
+                        <p>© 2026 JCAT Solutions HRM. All rights reserved.</p>
+                    </div>
+                </div>
+            </body>
+            </html>
+        """.formatted(safeName, safeMonth, safeYear, salaryStr);
+
+        String apiKey = System.getenv("RESEND_API_KEY");
+        if (apiKey != null && !apiKey.trim().isEmpty()) {
+            sendViaResend(toEmail, "Salary Paid - " + safeMonth + " " + safeYear, htmlContent, true);
+            return;
+        }
+
+        // Fallback to SMTP
+        try {
+            MimeMessage message = mailSender.createMimeMessage();
+            MimeMessageHelper helper = new MimeMessageHelper(message, true, "UTF-8");
+            helper.setFrom(fromEmail);
+            helper.setTo(toEmail);
+            helper.setSubject("Salary Paid - " + safeMonth + " " + safeYear);
+            helper.setText(htmlContent, true);
+            mailSender.send(message);
+            log.info("✓ Payroll paid email sent via SMTP to: {} (Employee ID {})", toEmail, employeeId);
+        } catch (Exception e) {
+            log.error("✗ Failed to send payroll paid email to: {} (Employee ID {}): {}", toEmail, employeeId, e.getMessage(), e);
+        }
+    }
+
     // Send Leave Request Notification to Admins
     public void sendLeaveRequestNotification(
             String toEmail,

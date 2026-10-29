@@ -118,7 +118,7 @@ public class PayrollGenerationHelper {
         }
 
         int workingDays = attendanceSummary.getWorkingDays() != null ? attendanceSummary.getWorkingDays() : 26;
-        
+
         int daysInMonth = 30;
         try {
             String mStr = payrollPeriod.getMonth();
@@ -195,18 +195,6 @@ public class PayrollGenerationHelper {
                         employee.getName(), payrollPeriod.getMonth(), payrollPeriod.getYear(), netSalaryBd.doubleValue()),
                 generatedBy);
 
-        // Publish event for AFTER_COMMIT async email notification
-        eventPublisher.publishEvent(PayrollNotificationEvent.builder()
-                .type(PayrollNotificationEvent.NotificationType.GENERATED)
-                .payrollId(saved.getId())
-                .employeeId(employee.getId())
-                .employeeName(employee.getName())
-                .employeeEmail(employee.getEmail())
-                .month(payrollPeriod.getMonth())
-                .year(payrollPeriod.getYear())
-                .netSalary(netSalaryBd)
-                .build());
-
         return true;
     }
 
@@ -246,18 +234,6 @@ public class PayrollGenerationHelper {
                         payroll.getUser().getName(), saved.getNetSalary()),
                 approvedBy);
 
-        // Publish event for AFTER_COMMIT async email notification
-        eventPublisher.publishEvent(PayrollNotificationEvent.builder()
-                .type(PayrollNotificationEvent.NotificationType.APPROVED)
-                .payrollId(saved.getId())
-                .employeeId(payroll.getUser().getId())
-                .employeeName(payroll.getUser().getName())
-                .employeeEmail(payroll.getUser().getEmail())
-                .month(payroll.getPayrollPeriod().getMonth())
-                .year(payroll.getPayrollPeriod().getYear())
-                .netSalary(netSalaryBd)
-                .build());
-
         return saved;
     }
 
@@ -292,6 +268,20 @@ public class PayrollGenerationHelper {
                 String.format("Payroll marked as PAID for %s — net: %.2f",
                         payroll.getUser().getName(), saved.getNetSalary()),
                 payroll.getApprovedBy() != null ? payroll.getApprovedBy() : payroll.getGeneratedBy());
+
+        // Email the employee ONLY now that the payroll is PAID (sent AFTER_COMMIT, async).
+        // The early-return above for already-PAID payrolls guarantees no duplicate email.
+        BigDecimal paidNetSalaryBd = saved.getNetSalary() != null ? BigDecimal.valueOf(saved.getNetSalary()) : BigDecimal.ZERO;
+        eventPublisher.publishEvent(PayrollNotificationEvent.builder()
+                .type(PayrollNotificationEvent.NotificationType.PAID)
+                .payrollId(saved.getId())
+                .employeeId(payroll.getUser().getId())
+                .employeeName(payroll.getUser().getName())
+                .employeeEmail(payroll.getUser().getEmail())
+                .month(payroll.getPayrollPeriod().getMonth())
+                .year(payroll.getPayrollPeriod().getYear())
+                .netSalary(paidNetSalaryBd)
+                .build());
 
         return saved;
     }
