@@ -4,12 +4,14 @@ import com.hrm.system.dto.AnnouncementDto;
 import com.hrm.system.dto.AuditLogDto;
 import com.hrm.system.enumm.AuditAction;
 import com.hrm.system.model.Announcement;
+import com.hrm.system.model.Role;
 import com.hrm.system.model.User;
 import com.hrm.system.repository.AnnouncementRepository;
 import com.hrm.system.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
@@ -18,6 +20,7 @@ import org.springframework.web.context.request.ServletRequestAttributes;
 import jakarta.servlet.http.HttpServletRequest;
 
 import java.util.List;
+import java.util.concurrent.Executor;
 import java.util.stream.Collectors;
 
 @Slf4j
@@ -33,6 +36,11 @@ public class AnnouncementService {
 
     @Autowired
     private EmailService emailService;
+
+    // Reuse the existing background email pool (see AsyncConfig)
+    @Autowired
+    @Qualifier("payrollEmailExecutor")
+    private Executor emailExecutor;
 
     // ── Convert Entity → DTO ──────────────────────────────────────────────────
     private AnnouncementDto toDto(Announcement a) {
@@ -82,19 +90,9 @@ public class AnnouncementService {
 
         AnnouncementDto saved = toDto(announcementRepository.save(a));
 
-        // Send email notifications to all employees
-        List<User> employees = userRepository.findAll();
-        for (User employee : employees) {
-            try {
-                emailService.sendAnnouncementNotification(
-                        employee.getEmail(),
-                        employee.getName(),
-                        saved.getTitle(),
-                        saved.getContent()
-                );
-            } catch (Exception e) {
-                log.warn("Failed to send announcement email to {}: {}", employee.getEmail(), e.getMessage());
-            }
+        // Email employees only if the announcement is live (not a draft/inactive one)
+        if (saved.isActive()) {
+            notifyEmployeesAsync(saved.getTitle(), saved.getContent());
         }
 
         // ✅ Manual audit log — guaranteed to fire regardless of AOP
@@ -107,11 +105,17 @@ public class AnnouncementService {
     public AnnouncementDto update(Long id, AnnouncementDto dto) {
         Announcement a = announcementRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Announcement not found"));
+        boolean wasActive = a.isActive();
         a.setTitle(dto.getTitle());
         a.setContent(dto.getContent());
         a.setActive(dto.isActive());
 
         AnnouncementDto saved = toDto(announcementRepository.save(a));
+
+        // Email only when a draft is published (inactive -> active), never on a plain edit
+        if (!wasActive && saved.isActive()) {
+            notifyEmployeesAsync(saved.getTitle(), saved.getContent());
+        }
 
         // ✅ Manual audit log — guaranteed to fire regardless of AOP
         logAudit(AuditAction.UPDATE, saved.getId(), "Updated Announcement: " + saved.getTitle());
@@ -128,6 +132,26 @@ public class AnnouncementService {
 
         // ✅ Manual audit log for delete too
         logAudit(AuditAction.DELETE, id, "Deleted Announcement: " + title);
+    }
+
+    // ── Email helper ──────────────────────────────────────────────────────────
+    // Recipients are loaded now (request thread); sending runs in the background
+    // so saving an announcement returns immediately. Employees only, valid emails only.
+    private void notifyEmployeesAsync(String title, String content) {
+        List<User> recipients = userRepository.findByRole(Role.EMPLOYEE).stream()
+                .filter(u -> u.getEmail() != null && !u.getEmail().isBlank())
+                .collect(Collectors.toList());
+
+        emailExecutor.execute(() -> {
+            for (User employee : recipients) {
+                try {
+                    emailService.sendAnnouncementNotification(
+                            employee.getEmail(), employee.getName(), title, content);
+                } catch (Exception e) {
+                    log.warn("Failed to send announcement email to {}: {}", employee.getEmail(), e.getMessage());
+                }
+            }
+        });
     }
 
     // ── Audit Helper ──────────────────────────────────────────────────────────
