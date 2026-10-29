@@ -45,4 +45,19 @@ public interface UserRepository extends JpaRepository<User, Long> {
         OR LOWER(u.email) LIKE LOWER(CONCAT('%', :query, '%'))
     """)
     List<User> searchByNameOrEmail(@Param("query") String query);
+
+    // Presence heartbeat: only writes if not stamped since :threshold (throttle)
+    @Modifying
+    @Transactional
+    @Query("""
+        UPDATE User u SET u.lastSeenAt = :now
+        WHERE LOWER(u.email) = LOWER(:email)
+          AND (u.lastSeenAt IS NULL OR u.lastSeenAt < :threshold)
+    """)
+    int touchLastSeen(@Param("email") String email,
+                      @Param("now") LocalDateTime now,
+                      @Param("threshold") LocalDateTime threshold);
+
+    List<User> findByLastSeenAtAfterOrderByLastSeenAtDesc(LocalDateTime since);
+}
 }
