@@ -89,9 +89,10 @@ public class PayRollService {
         double basicSalary = employee.getBasicSalary() != null ? employee.getBasicSalary() : 0.0;
         int workingDays = attendanceSummary.getWorkingDays() != null ? attendanceSummary.getWorkingDays() : 26;
 
-        // Daily rate is per working day, the same unit absences are counted in
+        // Daily rate = monthly salary / calendar days of the month (company rule)
         BigDecimal basicSalaryBd = BigDecimal.valueOf(basicSalary);
-        BigDecimal dailySalaryBd = payrollCalculationService.calculateDailySalary(basicSalaryBd, workingDays > 0 ? workingDays : 26);
+        BigDecimal dailySalaryBd = payrollCalculationService.calculateDailySalaryForMonth(
+                basicSalaryBd, payrollPeriod.getMonth(), payrollPeriod.getYear());
 
         Payroll payroll = new Payroll();
         payroll.setPayrollPeriod(payrollPeriod);
@@ -292,9 +293,9 @@ public class PayRollService {
         double basicSalary = payroll.getUser().getBasicSalary() != null ? payroll.getUser().getBasicSalary() : 0.0;
         int workingDays = attendanceSummary.getWorkingDays() != null ? attendanceSummary.getWorkingDays() : 26;
 
-        // Daily rate is per working day, the same unit absences are counted in
-        BigDecimal dailySalaryBd = payrollCalculationService.calculateDailySalary(
-                BigDecimal.valueOf(basicSalary), workingDays > 0 ? workingDays : 26);
+        // Daily rate = monthly salary / calendar days of the month (company rule)
+        BigDecimal dailySalaryBd = payrollCalculationService.calculateDailySalaryForMonth(
+                BigDecimal.valueOf(basicSalary), payroll.getPayrollPeriod().getMonth(), payroll.getPayrollPeriod().getYear());
 
         payroll.setBasicSalary(basicSalary);
         payroll.setDailySalary(dailySalaryBd.doubleValue());

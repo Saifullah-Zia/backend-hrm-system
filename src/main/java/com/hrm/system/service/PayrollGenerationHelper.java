@@ -119,8 +119,9 @@ public class PayrollGenerationHelper {
 
         int workingDays = attendanceSummary.getWorkingDays() != null ? attendanceSummary.getWorkingDays() : 26;
 
-        // Daily rate is per working day, the same unit absences are counted in
-        BigDecimal dailySalaryBd   = payrollCalculationService.calculateDailySalary(basicSalaryBd, workingDays > 0 ? workingDays : 26);
+        // Daily rate = monthly salary / calendar days of the month (company rule)
+        BigDecimal dailySalaryBd   = payrollCalculationService.calculateDailySalaryForMonth(
+                basicSalaryBd, payrollPeriod.getMonth(), payrollPeriod.getYear());
         int        presentDays     = attendanceSummary.getPresentDays()    != null ? attendanceSummary.getPresentDays()    : 0;
         int        paidLeaveDays   = attendanceSummary.getPaidLeaveDays()  != null ? attendanceSummary.getPaidLeaveDays()  : 0;
         int        unpaidLeave     = attendanceSummary.getUnpaidLeaveDays()!= null ? attendanceSummary.getUnpaidLeaveDays(): 0;

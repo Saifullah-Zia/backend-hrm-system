@@ -105,16 +105,28 @@ class PayrollCalculationServiceTest {
     }
 
     @Test
-    @DisplayName("Recalculate: 4 of 22 days present (18 absent) pays only the attended days")
+    @DisplayName("Recalculate: 18 absent days in October deducted at salary / 31 calendar days")
     void testRecalculateTotalsDeductsAbsences() {
         Payroll p = payroll(40000, 22, 18);
+        p.setDailySalary(calculationService.calculateDailySalaryForMonth(BigDecimal.valueOf(40000), "October", 2026).doubleValue());
 
         BigDecimal tax = calculationService.recalculateTotals(p);
 
+        assertEquals(1290.32, p.getDailySalary());
         assertEquals(0, tax.compareTo(BigDecimal.ZERO)); // 480,000/year is below the taxable threshold
         assertEquals(40000.0, p.getGrossSalary());
-        assertEquals(32727.24, p.getTotalDeductions(), 0.001); // 18 x 1,818.18
-        assertEquals(7272.76, p.getNetSalary(), 0.001);
+        assertEquals(23225.76, p.getTotalDeductions(), 0.001); // 18 x 1,290.32
+        assertEquals(16774.24, p.getNetSalary(), 0.001);
+    }
+
+    @Test
+    @DisplayName("Days in month: calendar length for the payroll period month formats")
+    void testDaysInMonth() {
+        assertEquals(31, PayrollCalculationService.daysInMonth("October", 2026));
+        assertEquals(30, PayrollCalculationService.daysInMonth("November 2026", 2026));
+        assertEquals(28, PayrollCalculationService.daysInMonth("FEB", 2026));
+        assertEquals(29, PayrollCalculationService.daysInMonth("2", 2028));
+        assertEquals(30, PayrollCalculationService.daysInMonth(null, 2026));
     }
 
     @Test

@@ -34,6 +34,33 @@ public class PayrollCalculationService {
         return basicSalary.divide(BigDecimal.valueOf(workingDays), 2, RoundingMode.HALF_UP);
     }
 
+    /**
+     * Company rule: the daily rate is the monthly salary divided by the calendar
+     * days of the payroll month (31 for October, 28/29 for February), so weekends
+     * and holidays are paid and only absent / unpaid-leave days are deducted.
+     */
+    public BigDecimal calculateDailySalaryForMonth(BigDecimal basicSalary, String month, Integer year) {
+        return calculateDailySalary(basicSalary, daysInMonth(month, year));
+    }
+
+    /** Calendar days of a payroll period month such as "October", "October 2026", "OCT" or "10". */
+    public static int daysInMonth(String month, Integer year) {
+        if (month == null || month.trim().isEmpty() || year == null) return 30;
+        String clean = month.trim().split("\\s+")[0].toUpperCase();
+        java.time.Month m = null;
+        try {
+            m = java.time.Month.valueOf(clean);
+        } catch (IllegalArgumentException ignored) {
+            for (java.time.Month candidate : java.time.Month.values()) {
+                if (clean.length() >= 3 && candidate.name().startsWith(clean)) { m = candidate; break; }
+            }
+            if (m == null) {
+                try { m = java.time.Month.of(Integer.parseInt(clean)); } catch (Exception e) { return 30; }
+            }
+        }
+        return java.time.YearMonth.of(year, m).lengthOfMonth();
+    }
+
     public BigDecimal calculateGrossSalary(BigDecimal basicSalary, BigDecimal totalAllowances, BigDecimal totalBonuses) {
         BigDecimal basic = basicSalary != null && basicSalary.compareTo(BigDecimal.ZERO) > 0 ? basicSalary : BigDecimal.ZERO;
         BigDecimal allowances = totalAllowances != null && totalAllowances.compareTo(BigDecimal.ZERO) > 0 ? totalAllowances : BigDecimal.ZERO;
