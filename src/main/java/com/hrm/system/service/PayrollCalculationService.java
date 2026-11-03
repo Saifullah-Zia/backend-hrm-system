@@ -2,6 +2,7 @@ package com.hrm.system.service;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.hrm.system.model.Payroll;
 import com.hrm.system.model.PayrollPolicy;
 import com.hrm.system.repository.PayrollPolicyRepository;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -62,6 +63,40 @@ public class PayrollCalculationService {
         BigDecimal gross = grossSalary != null ? grossSalary : BigDecimal.ZERO;
         BigDecimal deductions = totalDeductions != null ? totalDeductions : BigDecimal.ZERO;
         return gross.subtract(deductions).setScale(2, RoundingMode.HALF_UP);
+    }
+
+    /**
+     * Recompute gross, total deductions and net salary from the payroll's stored
+     * inputs (basic, allowances, bonuses, attendance days, manual deduction).
+     * FBR tax is worked out on the basic salary unless HR has set an override.
+     *
+     * @return the income tax applied, so the caller can keep the tax line item in sync
+     */
+    public BigDecimal recalculateTotals(Payroll payroll) {
+        BigDecimal basic = toBd(payroll.getBasicSalary());
+        BigDecimal gross = calculateGrossSalary(basic, toBd(payroll.getTotalAllowances()), toBd(payroll.getTotalBonuses()));
+
+        BigDecimal incomeTax = payroll.getFbrTaxOverride() != null
+                ? toBd(payroll.getFbrTaxOverride()).max(BigDecimal.ZERO).setScale(2, RoundingMode.HALF_UP)
+                : calculateIncomeTax(basic);
+
+        BigDecimal deductions = calculateDeductions(
+                payroll.getUnpaidLeaveDays() != null ? payroll.getUnpaidLeaveDays() : 0,
+                payroll.getAbsentDays() != null ? payroll.getAbsentDays() : 0,
+                payroll.getLateDays() != null ? payroll.getLateDays() : 0,
+                toBd(payroll.getDailySalary()),
+                toBd(payroll.getManualDeduction()),
+                incomeTax);
+        BigDecimal net = calculateNetSalary(gross, deductions).max(BigDecimal.ZERO);
+
+        payroll.setGrossSalary(gross.doubleValue());
+        payroll.setTotalDeductions(deductions.doubleValue());
+        payroll.setNetSalary(net.doubleValue());
+        return incomeTax;
+    }
+
+    private static BigDecimal toBd(Double value) {
+        return value != null ? BigDecimal.valueOf(value) : BigDecimal.ZERO;
     }
 
     public BigDecimal calculateIncomeTax(BigDecimal monthlyTaxableSalary) {

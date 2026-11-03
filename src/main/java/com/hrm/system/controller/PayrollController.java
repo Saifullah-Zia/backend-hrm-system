@@ -151,7 +151,7 @@ public class PayrollController {
     @PreAuthorize("hasRole('SUPERADMIN') or hasRole('ADMIN')")
     public ResponseEntity<PayRollDto> updatePayroll(@PathVariable Long id, @RequestBody PayRollDto dto, HttpServletRequest request) {
         verifyElevatedAccess(request);
-        return ResponseEntity.ok(payRollService.updatePayroll(id, dto));
+        return ResponseEntity.ok(payRollService.updatePayroll(id, dto, getRequestingUserId(request)));
     }
 
     @DeleteMapping("/{id}")

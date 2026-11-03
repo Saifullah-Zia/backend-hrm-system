@@ -29,6 +29,7 @@ public class PayRollDto {
     private Integer paidLeaveDays;
     private Integer unpaidLeaveDays;
     private Integer absentDays;
+    private Integer holidayDays;        // paid public holidays
     private Double totalAllowances;
     private Double totalBonuses;
     private Double totalDeductions;
@@ -36,6 +37,11 @@ public class PayRollDto {
     private Double fbrTaxDeduction;
     private Double unpaidLeaveDeduction;
     private Double absentDeduction;
+    private Double autoFbrTax;          // what the tax rules would charge, shown next to an override
+    private Double fbrTaxOverride;      // null = auto-calculated
+    private Boolean useAutoFbrTax;      // update only: true clears the override
+    private Double manualDeduction;
+    private String deductionNote;
     private Double grossSalary;
     private Long generatedBy;
     private java.time.LocalDateTime generatedAt;

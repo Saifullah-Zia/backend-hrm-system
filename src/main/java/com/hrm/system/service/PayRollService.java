@@ -80,31 +80,18 @@ public class PayRollService {
             throw new RuntimeException("Payroll already exists for this employee and period");
         }
 
+        // Always refresh the summary so newly marked absences are picked up
+        attendanceService.generateAttendanceSummary(employeeId, payrollPeriodId);
         AttendanceSummary attendanceSummary = attendanceSummaryRepository
                 .findByEmployeeIdAndPayrollPeriodId(employeeId, payrollPeriodId)
-                .orElseGet(() -> {
-                    attendanceService.generateAttendanceSummary(employeeId, payrollPeriodId);
-                    return attendanceSummaryRepository.findByEmployeeIdAndPayrollPeriodId(employeeId, payrollPeriodId)
-                            .orElseThrow(() -> new RuntimeException("Failed to generate attendance summary for employee: " + employeeId));
-                });
+                .orElseThrow(() -> new RuntimeException("Failed to generate attendance summary for employee: " + employeeId));
 
         double basicSalary = employee.getBasicSalary() != null ? employee.getBasicSalary() : 0.0;
         int workingDays = attendanceSummary.getWorkingDays() != null ? attendanceSummary.getWorkingDays() : 26;
 
-        // Calculate daily salary using calendar days of the payroll month
-        int daysInMonth = 30;
-        try {
-            String mStr = payrollPeriod.getMonth();
-            if (mStr != null && mStr.contains(" ")) mStr = mStr.split(" ")[0];
-            if (mStr != null && payrollPeriod.getYear() != null) {
-                java.time.YearMonth ym = java.time.YearMonth.of(payrollPeriod.getYear(), java.time.Month.valueOf(mStr.trim().toUpperCase()));
-                daysInMonth = ym.lengthOfMonth();
-            }
-        } catch (Exception ex) {
-            daysInMonth = workingDays > 0 ? workingDays : 30;
-        }
+        // Daily rate is per working day, the same unit absences are counted in
         BigDecimal basicSalaryBd = BigDecimal.valueOf(basicSalary);
-        BigDecimal dailySalaryBd = payrollCalculationService.calculateDailySalary(basicSalaryBd, daysInMonth);
+        BigDecimal dailySalaryBd = payrollCalculationService.calculateDailySalary(basicSalaryBd, workingDays > 0 ? workingDays : 26);
 
         Payroll payroll = new Payroll();
         payroll.setPayrollPeriod(payrollPeriod);
@@ -117,47 +104,21 @@ public class PayRollService {
         payroll.setPaidLeaveDays(attendanceSummary.getPaidLeaveDays());
         payroll.setUnpaidLeaveDays(attendanceSummary.getUnpaidLeaveDays());
         payroll.setAbsentDays(attendanceSummary.getAbsentDays());
+        payroll.setHolidayDays(attendanceSummary.getHolidayDays() != null ? attendanceSummary.getHolidayDays() : 0);
         payroll.setTotalAllowances(0.0);
         payroll.setTotalBonuses(0.0);
-        payroll.setTotalDeductions(0.0);
+        payroll.setManualDeduction(0.0);
         payroll.setStatus(PayrollStatus.DRAFT);
         payroll.setGeneratedBy(generatedBy);
         payroll.setGeneratedAt(LocalDateTime.now());
 
-        BigDecimal grossSalaryBd = payrollCalculationService.calculateGrossSalary(basicSalaryBd, BigDecimal.ZERO, BigDecimal.ZERO);
-        payroll.setGrossSalary(grossSalaryBd.doubleValue());
-
-        int unpaidLeaveDays = attendanceSummary.getUnpaidLeaveDays() != null ? attendanceSummary.getUnpaidLeaveDays() : 0;
-        int absentDays = attendanceSummary.getAbsentDays() != null ? attendanceSummary.getAbsentDays() : 0;
-        int lateDays = attendanceSummary.getLateDays() != null ? attendanceSummary.getLateDays() : 0;
-        BigDecimal incomeTaxBd = payrollCalculationService.calculateIncomeTax(grossSalaryBd);
-        BigDecimal deductionsBd = payrollCalculationService.calculateDeductions(
-                unpaidLeaveDays, absentDays, lateDays, dailySalaryBd, BigDecimal.ZERO, incomeTaxBd);
-        payroll.setTotalDeductions(deductionsBd.doubleValue());
-
-        BigDecimal netSalaryBd = payrollCalculationService.calculateNetSalary(grossSalaryBd, deductionsBd);
-        payroll.setNetSalary(netSalaryBd.doubleValue());
+        BigDecimal incomeTaxBd = payrollCalculationService.recalculateTotals(payroll);
+        BigDecimal netSalaryBd = BigDecimal.valueOf(payroll.getNetSalary());
 
         Payroll saved = payrollRepository.save(payroll);
+        payrollGenerationHelper.syncIncomeTaxItem(saved, incomeTaxBd);
 
-        if (incomeTaxBd.compareTo(BigDecimal.ZERO) > 0) {
-            PayrollItem taxItem = new PayrollItem();
-            taxItem.setPayroll(saved);
-            taxItem.setType(PayrollItemType.DEDUCTION);
-            taxItem.setName("Income Tax");
-            taxItem.setAmount(incomeTaxBd.doubleValue());
-            taxItem.setDescription(payrollCalculationService.getAppliedTaxDescription(grossSalaryBd));
-            payrollItemRepository.save(taxItem);
-        }
-
-        notificationService.createNotification(
-                employee.getId(),
-                String.format("💰 Your payroll for %s %s has been generated. Net salary: %.2f",
-                        payrollPeriod.getMonth(), payrollPeriod.getYear(), netSalaryBd.doubleValue()),
-                "PAYROLL",
-                employee.getId(),
-                saved.getId()
-        );
+        // No employee notification here — employees are only notified when payroll is PAID.
 
         // Audit trail
         auditLogService.log("Payroll", saved.getId(), AuditAction.GENERATE,
@@ -247,15 +208,7 @@ public class PayRollService {
 
         Payroll saved = payrollRepository.save(payroll);
 
-        notificationService.createNotification(
-                payroll.getUser().getId(),
-                String.format("💰 Your payroll for %s %s has been approved. Net salary: %.2f",
-                        payroll.getPayrollPeriod().getMonth(), payroll.getPayrollPeriod().getYear(),
-                        saved.getNetSalary()),
-                "PAYROLL",
-                payroll.getUser().getId(),
-                saved.getId()
-        );
+        // No employee notification on approval — employees are only notified when payroll is PAID.
 
         // Audit trail
         auditLogService.log("Payroll", saved.getId(), AuditAction.APPROVE,
@@ -326,32 +279,22 @@ public class PayRollService {
         }
 
         payrollItemRepository.deleteByPayrollId(payrollId);
+        if (payroll.getPayrollItems() != null) payroll.getPayrollItems().clear();
 
+        // Refresh the summary so newly marked absences are picked up
+        Long employeeId = payroll.getUser().getId();
+        Long periodId = payroll.getPayrollPeriod().getId();
+        attendanceService.generateAttendanceSummary(employeeId, periodId);
         AttendanceSummary attendanceSummary = attendanceSummaryRepository
-                .findByEmployeeIdAndPayrollPeriodId(payroll.getUser().getId(), payroll.getPayrollPeriod().getId())
+                .findByEmployeeIdAndPayrollPeriodId(employeeId, periodId)
                 .orElseThrow(() -> new RuntimeException("Attendance summary not found"));
 
         double basicSalary = payroll.getUser().getBasicSalary() != null ? payroll.getUser().getBasicSalary() : 0.0;
         int workingDays = attendanceSummary.getWorkingDays() != null ? attendanceSummary.getWorkingDays() : 26;
 
-        // FIX (Finding 1): Use calendar days of the month as divisor — consistent
-        // with generatePayroll() and PayrollGenerationHelper. Previously this used
-        // workingDays (~22) which inflated the daily rate and therefore deductions.
-        int daysInMonth = 30;
-        try {
-            String mStr = payroll.getPayrollPeriod().getMonth();
-            if (mStr != null && mStr.contains(" ")) mStr = mStr.split(" ")[0];
-            if (mStr != null && payroll.getPayrollPeriod().getYear() != null) {
-                java.time.YearMonth ym = java.time.YearMonth.of(
-                        payroll.getPayrollPeriod().getYear(),
-                        java.time.Month.valueOf(mStr.trim().toUpperCase()));
-                daysInMonth = ym.lengthOfMonth();
-            }
-        } catch (Exception ex) {
-            daysInMonth = workingDays > 0 ? workingDays : 30;
-        }
-        BigDecimal basicSalaryBd = BigDecimal.valueOf(basicSalary);
-        BigDecimal dailySalaryBd = payrollCalculationService.calculateDailySalary(basicSalaryBd, daysInMonth);
+        // Daily rate is per working day, the same unit absences are counted in
+        BigDecimal dailySalaryBd = payrollCalculationService.calculateDailySalary(
+                BigDecimal.valueOf(basicSalary), workingDays > 0 ? workingDays : 26);
 
         payroll.setBasicSalary(basicSalary);
         payroll.setDailySalary(dailySalaryBd.doubleValue());
@@ -361,36 +304,14 @@ public class PayRollService {
         payroll.setPaidLeaveDays(attendanceSummary.getPaidLeaveDays());
         payroll.setUnpaidLeaveDays(attendanceSummary.getUnpaidLeaveDays());
         payroll.setAbsentDays(attendanceSummary.getAbsentDays());
-
-        BigDecimal grossSalaryBd = payrollCalculationService.calculateGrossSalary(
-                basicSalaryBd,
-                payroll.getTotalAllowances() != null ? BigDecimal.valueOf(payroll.getTotalAllowances()) : BigDecimal.ZERO,
-                payroll.getTotalBonuses() != null ? BigDecimal.valueOf(payroll.getTotalBonuses()) : BigDecimal.ZERO);
-        payroll.setGrossSalary(grossSalaryBd.doubleValue());
-
-        int unpaidLeaveDays = attendanceSummary.getUnpaidLeaveDays() != null ? attendanceSummary.getUnpaidLeaveDays() : 0;
-        int absentDays = attendanceSummary.getAbsentDays() != null ? attendanceSummary.getAbsentDays() : 0;
-        int lateDays = attendanceSummary.getLateDays() != null ? attendanceSummary.getLateDays() : 0;
-        BigDecimal incomeTaxBd = payrollCalculationService.calculateIncomeTax(grossSalaryBd);
-        BigDecimal deductionsBd = payrollCalculationService.calculateDeductions(
-                unpaidLeaveDays, absentDays, lateDays, dailySalaryBd, BigDecimal.ZERO, incomeTaxBd);
-        payroll.setTotalDeductions(deductionsBd.doubleValue());
-
-        BigDecimal netSalaryBd = payrollCalculationService.calculateNetSalary(grossSalaryBd, deductionsBd);
-        payroll.setNetSalary(netSalaryBd.doubleValue());
+        payroll.setHolidayDays(attendanceSummary.getHolidayDays() != null ? attendanceSummary.getHolidayDays() : 0);
         payroll.setStatus(PayrollStatus.DRAFT);
 
-        Payroll saved = payrollRepository.save(payroll);
+        // Bonuses, allowances, manual deduction and any FBR tax override set by HR are kept
+        BigDecimal incomeTaxBd = payrollCalculationService.recalculateTotals(payroll);
 
-        if (incomeTaxBd.compareTo(BigDecimal.ZERO) > 0) {
-            PayrollItem taxItem = new PayrollItem();
-            taxItem.setPayroll(saved);
-            taxItem.setType(PayrollItemType.DEDUCTION);
-            taxItem.setName("Income Tax");
-            taxItem.setAmount(incomeTaxBd.doubleValue());
-            taxItem.setDescription(payrollCalculationService.getAppliedTaxDescription(grossSalaryBd));
-            payrollItemRepository.save(taxItem);
-        }
+        Payroll saved = payrollRepository.save(payroll);
+        payrollGenerationHelper.syncIncomeTaxItem(saved, incomeTaxBd);
         return mapToDto(saved);
     }
 
@@ -536,71 +457,115 @@ public class PayRollService {
 
     // ─── Update ───────────────────────────────────────────────────────────────
 
+    /**
+     * HR edit of a payroll. Attendance days, bonuses, allowances, a manual
+     * deduction and the FBR tax (override or back to automatic) can be changed
+     * while the payroll is DRAFT; totals are then recalculated server-side.
+     * A status-only update (no amount fields) keeps working for any status.
+     */
     @Transactional
-    public PayRollDto updatePayroll(Long id, PayRollDto dto) {
+    public PayRollDto updatePayroll(Long id, PayRollDto dto, Long performedBy) {
         Payroll payroll = payrollRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Payroll not found for ID: " + id));
 
-        // Snapshot old values for audit trail
-        double oldBonuses    = payroll.getTotalBonuses()    != null ? payroll.getTotalBonuses()    : 0.0;
-        double oldAllowances = payroll.getTotalAllowances() != null ? payroll.getTotalAllowances() : 0.0;
-        double oldNet        = payroll.getNetSalary()       != null ? payroll.getNetSalary()       : 0.0;
+        boolean editsAmounts = dto.getTotalBonuses() != null || dto.getBonuses() != null
+                || dto.getTotalAllowances() != null || dto.getManualDeduction() != null
+                || dto.getFbrTaxOverride() != null || Boolean.TRUE.equals(dto.getUseAutoFbrTax())
+                || dto.getPresentDays() != null || dto.getAbsentDays() != null
+                || dto.getUnpaidLeaveDays() != null || dto.getLateDays() != null
+                || dto.getPaidLeaveDays() != null;
 
-        if (dto.getTotalBonuses() != null)    payroll.setTotalBonuses(dto.getTotalBonuses());
-        else if (dto.getBonuses() != null)    payroll.setTotalBonuses(dto.getBonuses());
+        if (editsAmounts && payroll.getStatus() != PayrollStatus.DRAFT) {
+            throw new IllegalStateException("Only DRAFT payrolls can be edited. This payroll is " + payroll.getStatus() + ".");
+        }
 
-        if (dto.getTotalAllowances() != null) payroll.setTotalAllowances(dto.getTotalAllowances());
+        List<String> changes = new java.util.ArrayList<>();
+        double oldNet = payroll.getNetSalary() != null ? payroll.getNetSalary() : 0.0;
+
+        Double bonuses = dto.getTotalBonuses() != null ? dto.getTotalBonuses() : dto.getBonuses();
+        if (bonuses != null) {
+            requireNonNegative(bonuses, "Bonus");
+            trackChange(changes, "bonus", payroll.getTotalBonuses(), bonuses);
+            payroll.setTotalBonuses(bonuses);
+        }
+        if (dto.getTotalAllowances() != null) {
+            requireNonNegative(dto.getTotalAllowances(), "Allowances");
+            trackChange(changes, "allowances", payroll.getTotalAllowances(), dto.getTotalAllowances());
+            payroll.setTotalAllowances(dto.getTotalAllowances());
+        }
+        if (dto.getManualDeduction() != null) {
+            requireNonNegative(dto.getManualDeduction(), "Manual deduction");
+            trackChange(changes, "manual deduction", payroll.getManualDeduction(), dto.getManualDeduction());
+            payroll.setManualDeduction(dto.getManualDeduction());
+        }
+        if (Boolean.TRUE.equals(dto.getUseAutoFbrTax())) {
+            if (payroll.getFbrTaxOverride() != null) changes.add("FBR tax: override removed (automatic)");
+            payroll.setFbrTaxOverride(null);
+        } else if (dto.getFbrTaxOverride() != null) {
+            requireNonNegative(dto.getFbrTaxOverride(), "FBR tax");
+            trackChange(changes, "FBR tax", payroll.getFbrTaxOverride(), dto.getFbrTaxOverride());
+            payroll.setFbrTaxOverride(dto.getFbrTaxOverride());
+        }
+
+        if (dto.getPresentDays() != null)     { trackChange(changes, "present days", payroll.getPresentDays(), dto.getPresentDays());          payroll.setPresentDays(requireDays(dto.getPresentDays(), "Present days")); }
+        if (dto.getAbsentDays() != null)      { trackChange(changes, "absent days", payroll.getAbsentDays(), dto.getAbsentDays());             payroll.setAbsentDays(requireDays(dto.getAbsentDays(), "Absent days")); }
+        if (dto.getUnpaidLeaveDays() != null) { trackChange(changes, "unpaid leave days", payroll.getUnpaidLeaveDays(), dto.getUnpaidLeaveDays()); payroll.setUnpaidLeaveDays(requireDays(dto.getUnpaidLeaveDays(), "Unpaid leave days")); }
+        if (dto.getPaidLeaveDays() != null)   { trackChange(changes, "paid leave days", payroll.getPaidLeaveDays(), dto.getPaidLeaveDays());   payroll.setPaidLeaveDays(requireDays(dto.getPaidLeaveDays(), "Paid leave days")); }
+        if (dto.getLateDays() != null)        { trackChange(changes, "late days", payroll.getLateDays(), dto.getLateDays());                   payroll.setLateDays(requireDays(dto.getLateDays(), "Late days")); }
+
+        int workingDays = payroll.getWorkingDays() != null ? payroll.getWorkingDays() : 0;
+        int deductedDays = (payroll.getAbsentDays() != null ? payroll.getAbsentDays() : 0)
+                + (payroll.getUnpaidLeaveDays() != null ? payroll.getUnpaidLeaveDays() : 0);
+        if (workingDays > 0 && deductedDays > workingDays) {
+            throw new IllegalArgumentException("Absent + unpaid leave days (" + deductedDays
+                    + ") cannot exceed working days (" + workingDays + ").");
+        }
+
+        if (dto.getDeductionNote() != null) {
+            String note = dto.getDeductionNote().trim();
+            payroll.setDeductionNote(note.isEmpty() ? null : note.substring(0, Math.min(note.length(), 500)));
+        }
 
         if (dto.getStatus() != null) {
             payroll.setStatus(PayrollStatus.valueOf(dto.getStatus()));
         }
 
-        BigDecimal basicBd = payroll.getBasicSalary() != null ? BigDecimal.valueOf(payroll.getBasicSalary()) : BigDecimal.ZERO;
-        BigDecimal allowancesBd = payroll.getTotalAllowances() != null ? BigDecimal.valueOf(payroll.getTotalAllowances()) : BigDecimal.ZERO;
-        BigDecimal bonusesBd = payroll.getTotalBonuses() != null ? BigDecimal.valueOf(payroll.getTotalBonuses()) : BigDecimal.ZERO;
-        BigDecimal grossSalaryBd = payrollCalculationService.calculateGrossSalary(basicBd, allowancesBd, bonusesBd);
-        payroll.setGrossSalary(grossSalaryBd.doubleValue());
-
-        BigDecimal dailySalaryBd = payroll.getDailySalary() != null ? BigDecimal.valueOf(payroll.getDailySalary()) : BigDecimal.ZERO;
-        int unpaidLeave = payroll.getUnpaidLeaveDays() != null ? payroll.getUnpaidLeaveDays() : 0;
-        int absentDays  = payroll.getAbsentDays()      != null ? payroll.getAbsentDays()      : 0;
-        int lateDays    = payroll.getLateDays()         != null ? payroll.getLateDays()         : 0;
-        BigDecimal autoDeductionsBd = payrollCalculationService.calculateDeductions(
-                unpaidLeave, absentDays, lateDays, dailySalaryBd, BigDecimal.ZERO);
-
-        BigDecimal totalDeductionsBd;
-        if (dto.getDeductions() != null) {
-            totalDeductionsBd = BigDecimal.valueOf(dto.getDeductions());
-        } else {
-            totalDeductionsBd = autoDeductionsBd;
-        }
-        payroll.setTotalDeductions(totalDeductionsBd.doubleValue());
-
-        BigDecimal netSalaryBd = payrollCalculationService.calculateNetSalary(grossSalaryBd, totalDeductionsBd);
-        payroll.setNetSalary(netSalaryBd.doubleValue());
-
+        BigDecimal incomeTaxBd = payrollCalculationService.recalculateTotals(payroll);
         Payroll saved = payrollRepository.save(payroll);
+        payrollGenerationHelper.syncIncomeTaxItem(saved, incomeTaxBd);
 
-        notificationService.createNotification(
-                payroll.getUser().getId(),
-                String.format("💰 Your payroll has been updated. Net salary: %.2f",
-                        saved.getNetSalary()),
-                "PAYROLL",
-                payroll.getUser().getId(),
-                saved.getId()
-        );
+        // No employee notification on edits — employees are only notified when payroll is PAID.
 
-        // Audit trail
-        auditLogService.log("Payroll", saved.getId(), AuditAction.UPDATE,
-                String.format("Payroll updated for %s — bonuses: %.2f→%.2f, allowances: %.2f→%.2f, net: %.2f→%.2f",
-                        payroll.getUser().getName(), oldBonuses,
-                        payroll.getTotalBonuses() != null ? payroll.getTotalBonuses() : 0.0,
-                        oldAllowances,
-                        payroll.getTotalAllowances() != null ? payroll.getTotalAllowances() : 0.0,
-                        oldNet, saved.getNetSalary()),
-                payroll.getGeneratedBy() != null ? payroll.getGeneratedBy() : payroll.getUser().getId());
+        if (editsAmounts) {
+            String summary = changes.isEmpty() ? "no field changes" : String.join(", ", changes);
+            auditLogService.log("Payroll", saved.getId(), AuditAction.UPDATE,
+                    String.format("Payroll edited for %s — %s; net: %.2f→%.2f%s",
+                            payroll.getUser().getName(), summary, oldNet, saved.getNetSalary(),
+                            saved.getDeductionNote() != null ? " — note: " + saved.getDeductionNote() : ""),
+                    performedBy != null ? performedBy : payroll.getGeneratedBy());
+        }
 
         return mapToDto(saved);
+    }
+
+    private static void requireNonNegative(Double value, String field) {
+        if (value < 0) throw new IllegalArgumentException(field + " cannot be negative.");
+    }
+
+    private static int requireDays(Integer value, String field) {
+        if (value < 0 || value > 31) throw new IllegalArgumentException(field + " must be between 0 and 31.");
+        return value;
+    }
+
+    private static void trackChange(List<String> changes, String field, Number oldValue, Number newValue) {
+        double before = oldValue != null ? oldValue.doubleValue() : 0.0;
+        if (Double.compare(before, newValue.doubleValue()) != 0) {
+            changes.add(String.format("%s: %s→%s", field, formatNumber(before), formatNumber(newValue.doubleValue())));
+        }
+    }
+
+    private static String formatNumber(double value) {
+        return value == Math.rint(value) ? String.valueOf((long) value) : String.format("%.2f", value);
     }
 
     // ─── Bulk Delete ──────────────────────────────────────────────────────────
@@ -705,6 +670,7 @@ public class PayRollService {
         dto.setPaidLeaveDays(payroll.getPaidLeaveDays());
         dto.setUnpaidLeaveDays(payroll.getUnpaidLeaveDays());
         dto.setAbsentDays(payroll.getAbsentDays());
+        dto.setHolidayDays(payroll.getHolidayDays() != null ? payroll.getHolidayDays() : 0);
         dto.setTotalAllowances(payroll.getTotalAllowances());
         dto.setTotalBonuses(payroll.getTotalBonuses());
         dto.setTotalDeductions(payroll.getTotalDeductions());
@@ -714,14 +680,16 @@ public class PayRollService {
         int lateDays = payroll.getLateDays() != null ? payroll.getLateDays() : 0;
         int unpaidLeave = payroll.getUnpaidLeaveDays() != null ? payroll.getUnpaidLeaveDays() : 0;
         int absentDays = payroll.getAbsentDays() != null ? payroll.getAbsentDays() : 0;
-        BigDecimal grossSalaryBd = payroll.getGrossSalary() != null ? BigDecimal.valueOf(payroll.getGrossSalary()) : BigDecimal.ZERO;
+        BigDecimal basicSalaryBd = payroll.getBasicSalary() != null ? BigDecimal.valueOf(payroll.getBasicSalary()) : BigDecimal.ZERO;
 
         BigDecimal lateDedBd = payrollCalculationService.applyLatePolicy(lateDays, dailySalaryBd);
         BigDecimal unpaidDedBd = payrollCalculationService.applyUnpaidLeavePolicy(unpaidLeave, dailySalaryBd);
         BigDecimal absentDedBd = payrollCalculationService.applyAbsentPolicy(absentDays, dailySalaryBd);
+        // FBR tax is calculated on the basic salary
+        BigDecimal autoTaxBd = payrollCalculationService.calculateIncomeTax(basicSalaryBd);
 
-        Double taxDed = null;
-        if (payroll.getPayrollItems() != null && !payroll.getPayrollItems().isEmpty()) {
+        Double taxDed = payroll.getFbrTaxOverride();
+        if (taxDed == null && payroll.getPayrollItems() != null && !payroll.getPayrollItems().isEmpty()) {
             for (PayrollItem item : payroll.getPayrollItems()) {
                 if (item.getType() == PayrollItemType.DEDUCTION && item.getName() != null && item.getName().toLowerCase().contains("tax")) {
                     taxDed = item.getAmount();
@@ -730,11 +698,15 @@ public class PayRollService {
             }
         }
         if (taxDed == null) {
-            taxDed = payrollCalculationService.calculateIncomeTax(grossSalaryBd).doubleValue();
+            taxDed = autoTaxBd.doubleValue();
         }
 
         dto.setLateDeduction(lateDedBd.doubleValue());
         dto.setFbrTaxDeduction(taxDed);
+        dto.setAutoFbrTax(autoTaxBd.doubleValue());
+        dto.setFbrTaxOverride(payroll.getFbrTaxOverride());
+        dto.setManualDeduction(payroll.getManualDeduction() != null ? payroll.getManualDeduction() : 0.0);
+        dto.setDeductionNote(payroll.getDeductionNote());
         dto.setUnpaidLeaveDeduction(unpaidDedBd.doubleValue());
         dto.setAbsentDeduction(absentDedBd.doubleValue());
 

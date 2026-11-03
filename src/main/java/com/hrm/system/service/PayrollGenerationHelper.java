@@ -119,32 +119,13 @@ public class PayrollGenerationHelper {
 
         int workingDays = attendanceSummary.getWorkingDays() != null ? attendanceSummary.getWorkingDays() : 26;
 
-        int daysInMonth = 30;
-        try {
-            String mStr = payrollPeriod.getMonth();
-            if (mStr != null && mStr.contains(" ")) mStr = mStr.split(" ")[0];
-            if (mStr != null && payrollPeriod.getYear() != null) {
-                String cleanMonth = mStr.trim().toUpperCase();
-                if (cleanMonth.length() > 3) {
-                    java.time.YearMonth ym = java.time.YearMonth.of(payrollPeriod.getYear(), java.time.Month.valueOf(cleanMonth));
-                    daysInMonth = ym.lengthOfMonth();
-                }
-            }
-        } catch (Exception e) {
-            daysInMonth = workingDays > 0 ? workingDays : 30;
-        }
-
-        BigDecimal dailySalaryBd   = payrollCalculationService.calculateDailySalary(basicSalaryBd, daysInMonth);
+        // Daily rate is per working day, the same unit absences are counted in
+        BigDecimal dailySalaryBd   = payrollCalculationService.calculateDailySalary(basicSalaryBd, workingDays > 0 ? workingDays : 26);
         int        presentDays     = attendanceSummary.getPresentDays()    != null ? attendanceSummary.getPresentDays()    : 0;
         int        paidLeaveDays   = attendanceSummary.getPaidLeaveDays()  != null ? attendanceSummary.getPaidLeaveDays()  : 0;
         int        unpaidLeave     = attendanceSummary.getUnpaidLeaveDays()!= null ? attendanceSummary.getUnpaidLeaveDays(): 0;
         int        absentDays      = attendanceSummary.getAbsentDays()     != null ? attendanceSummary.getAbsentDays()     : 0;
         int        lateDays        = attendanceSummary.getLateDays()       != null ? attendanceSummary.getLateDays()       : 0;
-
-        BigDecimal grossSalaryBd   = payrollCalculationService.calculateGrossSalary(basicSalaryBd, BigDecimal.ZERO, BigDecimal.ZERO);
-        BigDecimal incomeTaxBd     = payrollCalculationService.calculateIncomeTax(grossSalaryBd);
-        BigDecimal deductionsBd    = payrollCalculationService.calculateDeductions(unpaidLeave, absentDays, lateDays, dailySalaryBd, BigDecimal.ZERO, incomeTaxBd);
-        BigDecimal netSalaryBd     = payrollCalculationService.calculateNetSalary(grossSalaryBd, deductionsBd);
 
         Payroll payroll = new Payroll();
         payroll.setPayrollPeriod(payrollPeriod);
@@ -157,35 +138,21 @@ public class PayrollGenerationHelper {
         payroll.setPaidLeaveDays(paidLeaveDays);
         payroll.setUnpaidLeaveDays(unpaidLeave);
         payroll.setAbsentDays(absentDays);
+        payroll.setHolidayDays(attendanceSummary.getHolidayDays() != null ? attendanceSummary.getHolidayDays() : 0);
         payroll.setTotalAllowances(0.0);
         payroll.setTotalBonuses(0.0);
-        payroll.setTotalDeductions(deductionsBd.doubleValue());
-        payroll.setGrossSalary(grossSalaryBd.doubleValue());
-        payroll.setNetSalary(netSalaryBd.doubleValue());
+        payroll.setManualDeduction(0.0);
         payroll.setStatus(PayrollStatus.DRAFT);
         payroll.setGeneratedBy(generatedBy);
         payroll.setGeneratedAt(LocalDateTime.now());
 
+        BigDecimal incomeTaxBd = payrollCalculationService.recalculateTotals(payroll);
+        BigDecimal netSalaryBd = BigDecimal.valueOf(payroll.getNetSalary());
+
         Payroll saved = payrollRepository.save(payroll);
+        syncIncomeTaxItem(saved, incomeTaxBd);
 
-        if (incomeTaxBd.compareTo(BigDecimal.ZERO) > 0) {
-            PayrollItem taxItem = new PayrollItem();
-            taxItem.setPayroll(saved);
-            taxItem.setType(PayrollItemType.DEDUCTION);
-            taxItem.setName("Income Tax");
-            taxItem.setAmount(incomeTaxBd.doubleValue());
-            taxItem.setDescription(payrollCalculationService.getAppliedTaxDescription(grossSalaryBd));
-            payrollItemRepository.save(taxItem);
-        }
-
-        notificationService.createNotification(
-                employee.getId(),
-                String.format("💰 Your payroll for %s %s has been generated. Net salary: %.2f",
-                        payrollPeriod.getMonth(), payrollPeriod.getYear(), netSalaryBd.doubleValue()),
-                "PAYROLL",
-                employee.getId(),
-                saved.getId()
-        );
+        // No employee notification here — employees are only notified when payroll is PAID.
 
         System.out.println("✓ Payroll generated for employee " + employeeId + " — net: " + netSalaryBd.doubleValue());
 
@@ -196,6 +163,37 @@ public class PayrollGenerationHelper {
                 generatedBy);
 
         return true;
+    }
+
+    /**
+     * Keep the single "Income Tax" deduction item in line with the tax actually
+     * applied — created, updated or removed (when the tax is zero).
+     */
+    public void syncIncomeTaxItem(Payroll payroll, BigDecimal incomeTax) {
+        PayrollItem taxItem = payrollItemRepository.findByPayrollId(payroll.getId()).stream()
+                .filter(i -> i.getType() == PayrollItemType.DEDUCTION && "Income Tax".equals(i.getName()))
+                .findFirst()
+                .orElse(null);
+
+        if (incomeTax == null || incomeTax.compareTo(BigDecimal.ZERO) <= 0) {
+            if (taxItem != null) {
+                if (payroll.getPayrollItems() != null) payroll.getPayrollItems().remove(taxItem);
+                payrollItemRepository.delete(taxItem);
+            }
+            return;
+        }
+
+        if (taxItem == null) {
+            taxItem = new PayrollItem();
+            taxItem.setPayroll(payroll);
+            taxItem.setType(PayrollItemType.DEDUCTION);
+            taxItem.setName("Income Tax");
+        }
+        taxItem.setAmount(incomeTax.doubleValue());
+        taxItem.setDescription(payroll.getFbrTaxOverride() != null
+                ? "Income Tax (set by HR)"
+                : payrollCalculationService.getAppliedTaxDescription(BigDecimal.valueOf(payroll.getBasicSalary() != null ? payroll.getBasicSalary() : 0.0)));
+        payrollItemRepository.save(taxItem);
     }
 
     /**
@@ -218,15 +216,7 @@ public class PayrollGenerationHelper {
         payroll.setApprovedAt(LocalDateTime.now());
         Payroll saved = payrollRepository.save(payroll);
 
-        BigDecimal netSalaryBd = saved.getNetSalary() != null ? BigDecimal.valueOf(saved.getNetSalary()) : BigDecimal.ZERO;
-
-        notificationService.createNotification(
-                payroll.getUser().getId(),
-                String.format("💰 Your payroll for %s %s has been approved. Net salary: %.2f",
-                        payroll.getPayrollPeriod().getMonth(), payroll.getPayrollPeriod().getYear(),
-                        saved.getNetSalary()),
-                "PAYROLL", payroll.getUser().getId(), saved.getId()
-        );
+        // No employee notification on approval — employees are only notified when payroll is PAID.
 
         // Audit trail
         auditLogService.log("Payroll", saved.getId(), AuditAction.APPROVE,

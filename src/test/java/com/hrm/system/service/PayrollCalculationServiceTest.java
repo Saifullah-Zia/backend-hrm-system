@@ -1,6 +1,7 @@
 package com.hrm.system.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.hrm.system.model.Payroll;
 import com.hrm.system.model.PayrollPolicy;
 import com.hrm.system.repository.PayrollPolicyRepository;
 import org.junit.jupiter.api.BeforeEach;
@@ -92,5 +93,67 @@ class PayrollCalculationServiceTest {
 
         BigDecimal actualTax = calculationService.calculateIncomeTax(BigDecimal.valueOf(85000));
         assertEquals(new BigDecimal("1750.00"), actualTax);
+    }
+
+    private static Payroll payroll(double basic, int workingDays, int absentDays) {
+        Payroll p = new Payroll();
+        p.setBasicSalary(basic);
+        p.setWorkingDays(workingDays);
+        p.setAbsentDays(absentDays);
+        p.setDailySalary(BigDecimal.valueOf(basic).divide(BigDecimal.valueOf(workingDays), 2, RoundingMode.HALF_UP).doubleValue());
+        return p;
+    }
+
+    @Test
+    @DisplayName("Recalculate: 4 of 22 days present (18 absent) pays only the attended days")
+    void testRecalculateTotalsDeductsAbsences() {
+        Payroll p = payroll(40000, 22, 18);
+
+        BigDecimal tax = calculationService.recalculateTotals(p);
+
+        assertEquals(0, tax.compareTo(BigDecimal.ZERO)); // 480,000/year is below the taxable threshold
+        assertEquals(40000.0, p.getGrossSalary());
+        assertEquals(32727.24, p.getTotalDeductions(), 0.001); // 18 x 1,818.18
+        assertEquals(7272.76, p.getNetSalary(), 0.001);
+    }
+
+    @Test
+    @DisplayName("Recalculate: HR FBR tax override and manual deduction replace the automatic tax")
+    void testRecalculateTotalsUsesFbrOverride() {
+        Payroll p = payroll(100000, 22, 0);
+        p.setTotalBonuses(10000.0);
+        p.setFbrTaxOverride(5000.0);
+        p.setManualDeduction(1000.0);
+
+        BigDecimal tax = calculationService.recalculateTotals(p);
+
+        assertEquals(new BigDecimal("5000.00"), tax);
+        assertEquals(110000.0, p.getGrossSalary());
+        assertEquals(6000.0, p.getTotalDeductions());
+        assertEquals(104000.0, p.getNetSalary());
+    }
+
+    @Test
+    @DisplayName("Recalculate: automatic FBR tax is based on basic salary, not on bonuses")
+    void testRecalculateTotalsTaxOnBasicOnly() {
+        Payroll p = payroll(85000, 22, 0);
+        p.setTotalBonuses(50000.0);
+
+        BigDecimal tax = calculationService.recalculateTotals(p);
+
+        assertEquals(new BigDecimal("350.00"), tax); // default FBR slabs: 1% of (1,020,000 - 600,000) / 12
+        assertEquals(135000.0, p.getGrossSalary());
+        assertEquals(134650.0, p.getNetSalary());
+    }
+
+    @Test
+    @DisplayName("Recalculate: net salary never goes below zero")
+    void testRecalculateTotalsNetNotNegative() {
+        Payroll p = payroll(40000, 22, 22);
+        p.setManualDeduction(5000.0);
+
+        calculationService.recalculateTotals(p);
+
+        assertEquals(0.0, p.getNetSalary());
     }
 }

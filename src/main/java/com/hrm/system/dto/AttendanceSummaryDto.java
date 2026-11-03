@@ -20,5 +20,6 @@ public class AttendanceSummaryDto {
     private Integer unpaidLeaveDays;
     private Integer absentDays;
     private Integer workingDays;
+    private Integer holidayDays;
     private LocalDateTime createdAt;
 }

@@ -59,6 +59,10 @@ public class Payroll {
     @Column(name = "absent_days")
     private Integer absentDays = 0;
 
+    // Paid public holidays on weekdays (not part of working days)
+    @Column(name = "holiday_days")
+    private Integer holidayDays = 0;
+
     @Column(name = "total_allowances")
     private Double totalAllowances = 0.0;
 
@@ -67,6 +71,16 @@ public class Payroll {
 
     @Column(name = "total_deductions")
     private Double totalDeductions = 0.0;
+
+    // HR override for the FBR tax amount; null means the tax is auto-calculated
+    @Column(name = "fbr_tax_override")
+    private Double fbrTaxOverride;
+
+    @Column(name = "manual_deduction")
+    private Double manualDeduction = 0.0;
+
+    @Column(name = "deduction_note", length = 500)
+    private String deductionNote;
 
     @Column(name = "gross_salary")
     private Double grossSalary = 0.0;

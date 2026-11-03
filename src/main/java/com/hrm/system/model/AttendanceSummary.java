@@ -54,6 +54,10 @@ public class AttendanceSummary {
     @Column(name = "working_days", nullable = false)
     private Integer workingDays = 0;
 
+    // Paid public holidays falling on weekdays (not part of working days)
+    @Column(name = "holiday_days")
+    private Integer holidayDays = 0;
+
     @CreatedDate
     @Column(name = "created_at", updatable = false)
     private LocalDateTime createdAt;

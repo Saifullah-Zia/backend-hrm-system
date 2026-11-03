@@ -597,6 +597,18 @@ public class AttendanceService {
         LocalDate startDate = yearMonth.atDay(1);
         LocalDate endDate = yearMonth.atEndOfMonth();
 
+        // Employees who joined mid-month are only accountable from their joining date
+        LocalDate joiningDate = employee.getEmployeeProfile() != null ? employee.getEmployeeProfile().getJoiningDate() : null;
+        LocalDate accountableFrom = joiningDate != null && joiningDate.isAfter(startDate) ? joiningDate : startDate;
+
+        // A past working day with no check-in, leave or holiday counts as ABSENT.
+        // Only days up to yesterday are marked — today and future days are still open.
+        LocalDate yesterday = LocalDate.now(AppTimeZone.PKT).minusDays(1);
+        LocalDate markUntil = endDate.isBefore(yesterday) ? endDate : yesterday;
+        if (!markUntil.isBefore(accountableFrom)) {
+            markAttendanceForDateRange(accountableFrom, markUntil, List.of(employeeId));
+        }
+
         // Get attendance records for the period
         List<Attendance> attendances = attendanceRepository.findByUserIdAndDateBetween(employeeId, startDate, endDate);
 
@@ -607,13 +619,30 @@ public class AttendanceService {
         int unpaidLeaveDays = (int) attendances.stream().filter(a -> "UNPAID_LEAVE".equals(a.getStatus())).count();
         int absentDays = (int) attendances.stream().filter(a -> "ABSENT".equals(a.getStatus())).count();
 
-        // Calculate working days (excluding weekends - Saturday, Sunday)
+        // Calculate working days (excluding weekends and holidays). Working days
+        // before the joining date are unpaid, so they are counted as absent.
+        // Weekday holidays are paid and counted separately, unless the employee
+        // actually worked that day (then it is already in present/late days).
+        java.util.Set<LocalDate> workedDates = attendances.stream()
+                .filter(a -> "PRESENT".equals(a.getStatus()) || "LATE".equals(a.getStatus()))
+                .map(Attendance::getDate)
+                .collect(Collectors.toSet());
         int workingDays = 0;
+        int holidayDays = 0;
         LocalDate current = startDate;
         while (!current.isAfter(endDate)) {
             DayOfWeek dayOfWeek = current.getDayOfWeek();
             if (dayOfWeek != DayOfWeek.SATURDAY && dayOfWeek != DayOfWeek.SUNDAY) {
-                workingDays++;
+                if (holidayService.isHoliday(current)) {
+                    if (!current.isBefore(accountableFrom) && !workedDates.contains(current)) {
+                        holidayDays++;
+                    }
+                } else {
+                    workingDays++;
+                    if (current.isBefore(accountableFrom)) {
+                        absentDays++;
+                    }
+                }
             }
             current = current.plusDays(1);
         }
@@ -637,6 +666,7 @@ public class AttendanceService {
         summary.setUnpaidLeaveDays(unpaidLeaveDays);
         summary.setAbsentDays(absentDays);
         summary.setWorkingDays(workingDays);
+        summary.setHolidayDays(holidayDays);
 
         AttendanceSummary saved = attendanceSummaryRepository.save(summary);
         return mapToAttendanceSummaryDto(saved);
@@ -700,6 +730,7 @@ public class AttendanceService {
         dto.setUnpaidLeaveDays(summary.getUnpaidLeaveDays());
         dto.setAbsentDays(summary.getAbsentDays());
         dto.setWorkingDays(summary.getWorkingDays());
+        dto.setHolidayDays(summary.getHolidayDays());
         dto.setCreatedAt(summary.getCreatedAt());
         return dto;
     }
