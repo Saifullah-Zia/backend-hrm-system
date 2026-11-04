@@ -8,7 +8,6 @@ import org.springframework.web.bind.annotation.*;
 
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.beans.factory.annotation.Value;
-import java.util.HashMap;
 import java.util.Map;
 
 @RestController
@@ -36,14 +35,11 @@ public class SettingsController {
     }
 
     @GetMapping("/my-ip")
-    public ResponseEntity<Map<String, String>> getMyIp(HttpServletRequest request) {
-        Map<String, String> result = new HashMap<>();
-        result.put("remoteAddr",       String.valueOf(request.getRemoteAddr()));
-        result.put("x-forwarded-for",  String.valueOf(request.getHeader("X-Forwarded-For")));
-        result.put("x-real-ip",        String.valueOf(request.getHeader("X-Real-IP")));
-        result.put("cf-connecting-ip", String.valueOf(request.getHeader("CF-Connecting-IP")));
-        result.put("resolvedClientIp", com.hrm.system.util.IpUtil.getClientIp(request));
-        result.put("configuredOfficeIps", allowedOfficeIps);
-        return ResponseEntity.ok(result);
+    public ResponseEntity<Map<String, Object>> getMyIp(HttpServletRequest request) {
+        String clientIp = com.hrm.system.util.IpUtil.getClientIp(request);
+        // Public endpoint: says whether the caller is on the office network, never what that network is.
+        return ResponseEntity.ok(Map.of(
+                "resolvedClientIp", clientIp,
+                "onOfficeNetwork", com.hrm.system.util.IpUtil.isAllowedIp(clientIp, allowedOfficeIps, false)));
     }
 }
