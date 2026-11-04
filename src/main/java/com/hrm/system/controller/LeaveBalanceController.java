@@ -12,6 +12,9 @@ import org.springframework.web.bind.annotation.*;
 @RestController
 @RequestMapping("/api/leave/balance")
 public class LeaveBalanceController {
+    @org.springframework.beans.factory.annotation.Autowired
+    private com.hrm.system.security.AccessGuard accessGuard;
+
 
     @Autowired
     private LeaveBalanceService leaveBalanceService;
@@ -26,6 +29,7 @@ public class LeaveBalanceController {
             @PathVariable Long userId,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "10") int size) {
+        accessGuard.requireSelfOrPrivileged(userId);
         return ResponseEntity.ok(leaveBalanceService.getBalancesForUser(userId, page, size));
     }
 
@@ -38,6 +42,7 @@ public class LeaveBalanceController {
     public ResponseEntity<LeaveBalanceDto> getBalanceByType(
             @PathVariable Long userId,
             @PathVariable String leaveType) {
+        accessGuard.requireSelfOrPrivileged(userId);
         return ResponseEntity.ok(leaveBalanceService.getBalance(userId, leaveType));
     }
 

@@ -63,7 +63,6 @@ public class NotificationController {
             System.err.println("❌ Unauthorized access to /api/notifications");
             return ResponseEntity.status(401).build();
         }
-        System.out.println("✅ Fetching notifications for userId: " + userId);
         return ResponseEntity.ok(notificationService.getNotificationsByUserId(userId));
     }
 
@@ -75,7 +74,6 @@ public class NotificationController {
             return ResponseEntity.status(401).build();
         }
         Long count = notificationService.getUnreadCount(userId);
-        System.out.println("✅ Unread count for userId " + userId + ": " + count);
         Map<String, Long> response = new HashMap<>();
         response.put("count", count);
         return ResponseEntity.ok(response);
@@ -88,7 +86,6 @@ public class NotificationController {
             return ResponseEntity.status(401).build();
         }
         notificationService.markAsRead(userId, id);
-        System.out.println("✅ Marked notification " + id + " as read for userId: " + userId);
         return ResponseEntity.ok().build();
     }
     // Unread badge counts for the employee sidebar (My Notices / My Payslips)
@@ -130,7 +127,6 @@ public class NotificationController {
             return ResponseEntity.status(401).build();
         }
         notificationService.markAllAsRead(userId);
-        System.out.println("✅ Marked all notifications as read for userId: " + userId);
         return ResponseEntity.ok().build();
     }
 }

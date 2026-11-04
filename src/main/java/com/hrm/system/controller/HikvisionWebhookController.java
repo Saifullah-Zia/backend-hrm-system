@@ -24,6 +24,12 @@ public class HikvisionWebhookController {
     private final AttendanceService attendanceService;
     private final ObjectMapper objectMapper;
 
+    @org.springframework.beans.factory.annotation.Value("${hikvision.webhook.secret:}")
+    private String webhookSecret;
+
+    @org.springframework.beans.factory.annotation.Value("${office.allowed.ips:58.65.129.12}")
+    private String allowedOfficeIps;
+
     private static final DateTimeFormatter EVENT_TIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
 
     public HikvisionWebhookController(EmployeeProfileRepository employeeProfileRepository,
@@ -37,19 +43,13 @@ public class HikvisionWebhookController {
 
     @PostMapping("/webhook")
     public ResponseEntity<?> handleWebhook(@RequestParam Map<String, String> formData,
-                                           @RequestParam(required = false) MultipartFile file) {
+                                           @RequestParam(required = false) MultipartFile file,
+                                           jakarta.servlet.http.HttpServletRequest request) {
+        if (!isTrustedDevice(request, formData.get("key"))) {
+            System.out.println("Rejected Hikvision webhook call from " + com.hrm.system.util.IpUtil.getClientIp(request));
+            return ResponseEntity.status(403).body("Forbidden");
+        }
         try {
-            // Log all received form data for debugging
-            System.out.println("=== HIKVISION WEBHOOK RECEIVED ===");
-            System.out.println("Form data keys: " + formData.keySet());
-            for (Map.Entry<String, String> entry : formData.entrySet()) {
-                System.out.println(entry.getKey() + " = " + entry.getValue());
-            }
-            if (file != null) {
-                System.out.println("File received: " + file.getOriginalFilename() + ", size: " + file.getSize());
-            }
-            System.out.println("===================================");
-
             // Hikvision sends event data as JSON string in event_log field
             String eventLogJson = formData.get("event_log");
             if (eventLogJson == null || eventLogJson.isBlank()) {
@@ -168,8 +168,18 @@ public class HikvisionWebhookController {
             // infinite device retries. Log the error so it's visible in Railway logs.
             System.out.println("Error processing webhook: " + e.getMessage());
             e.printStackTrace();
-            return ResponseEntity.ok("Acknowledged (error logged): " + e.getMessage());
+            return ResponseEntity.ok("Acknowledged (error logged)");
         }
+    }
+
+    /** With HIKVISION_WEBHOOK_SECRET set, the device URL must carry ?key=<secret>. Otherwise only the office IP is accepted. */
+    private boolean isTrustedDevice(jakarta.servlet.http.HttpServletRequest request, String key) {
+        if (webhookSecret != null && !webhookSecret.isBlank()) {
+            return key != null && java.security.MessageDigest.isEqual(
+                    webhookSecret.getBytes(java.nio.charset.StandardCharsets.UTF_8),
+                    key.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        }
+        return com.hrm.system.util.IpUtil.isAllowedIp(com.hrm.system.util.IpUtil.getClientIp(request), allowedOfficeIps, false);
     }
 
     private LocalDate parseEventDate(String timestamp) {

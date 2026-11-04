@@ -293,6 +293,21 @@ public class AttendanceService {
 
     // ── Queries ───────────────────────────────────────────────────────────────
 
+    /** HR attendance screens load a date range instead of the full history. */
+    public List<AttendanceDto> getRange(LocalDate start, LocalDate end) {
+        if (end.isBefore(start)) {
+            throw new IllegalArgumentException("End date cannot be before start date.");
+        }
+        if (start.plusDays(MAX_RANGE_DAYS).isBefore(end)) {
+            throw new IllegalArgumentException("Date range cannot be longer than " + MAX_RANGE_DAYS + " days.");
+        }
+        return attendanceRepository.findByDateBetween(start, end)
+                .stream().map(this::mapToDto).collect(Collectors.toList());
+    }
+
+    private static final int MAX_RANGE_DAYS = 400;
+
+    @Transactional(readOnly = true)
     public List<AttendanceDto> getAll() {
         return attendanceRepository.findAll()
                 .stream().map(this::mapToDto).collect(Collectors.toList());
@@ -302,7 +317,7 @@ public class AttendanceService {
     public AttendanceDto.PageResponse getAllPaginated(int page, int size, String sortBy, String sortDir) {
         Sort sort = sortDir.equalsIgnoreCase("desc")
                 ? Sort.by(sortBy).descending() : Sort.by(sortBy).ascending();
-        Pageable pageable = PageRequest.of(page, size, sort);
+        Pageable pageable = com.hrm.system.util.PageLimits.of(page, size, sort);
         Page<Attendance> result = attendanceRepository.findAll(pageable);
         List<AttendanceDto> content = result.getContent().stream()
                 .map(this::mapToDto).collect(Collectors.toList());
@@ -318,7 +333,7 @@ public class AttendanceService {
         }
         Sort sort = sortDir.equalsIgnoreCase("desc")
                 ? Sort.by(sortBy).descending() : Sort.by(sortBy).ascending();
-        Pageable pageable = PageRequest.of(page, size, sort);
+        Pageable pageable = com.hrm.system.util.PageLimits.of(page, size, sort);
         Page<Attendance> result = attendanceRepository.findByUserId(userId, pageable);
         List<AttendanceDto> content = result.getContent().stream()
                 .map(this::mapToDto).collect(Collectors.toList());

@@ -66,12 +66,12 @@ public class SecurityConfig {
                         .sessionCreationPolicy(SessionCreationPolicy.STATELESS)
                 )
                 .authorizeHttpRequests(auth -> auth
+                        // Lets a real 404 or 405 reach the client instead of turning into a 403.
+                        .dispatcherTypeMatchers(jakarta.servlet.DispatcherType.ERROR).permitAll()
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
-                        .requestMatchers("/api/auth/login", "/api/auth/register", "/api/auth/refresh", "/api/auth/verify-email", "/api/auth/resend-otp", "/api/auth/forgot-password", "/api/auth/reset-password").permitAll()
+                        .requestMatchers("/api/auth/login", "/api/auth/register", "/api/auth/verify-email", "/api/auth/resend-otp", "/api/auth/forgot-password", "/api/auth/reset-password").permitAll()
                         .requestMatchers("/api/auth/payroll-otp/**").hasAnyRole("ADMIN", "SUPERADMIN")
                         .requestMatchers("/api/settings/my-ip").permitAll()
-                        .requestMatchers("/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html", "/swagger-resources/**", "/webjars/**").permitAll()
-                        .requestMatchers("/api/ws-chat/**").permitAll()
                         .requestMatchers("/api/hikvision/webhook").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/users/me").hasAnyRole("EMPLOYEE", "ADMIN", "SUPERADMIN")
                         .requestMatchers(HttpMethod.GET, "/api/employee-profiles/me").hasAnyRole("EMPLOYEE", "ADMIN", "SUPERADMIN")
@@ -86,13 +86,10 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST, "/api/resignations").authenticated()
                         .requestMatchers(HttpMethod.POST, "/api/attendance/checkout").hasAnyRole("EMPLOYEE", "ADMIN")
                         .requestMatchers(HttpMethod.POST, "/api/attendance/checkin").hasAnyRole("EMPLOYEE", "ADMIN")
-                        .requestMatchers(HttpMethod.GET, "/api/chat/files/**").permitAll()
-                        .requestMatchers(HttpMethod.GET, "/api/leaves/files/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/documents/files/**").authenticated()
                         .requestMatchers(HttpMethod.GET, "/api/notices/user/**").hasAnyRole("EMPLOYEE", "ADMIN", "SUPERADMIN")
                         .requestMatchers("/api/notices/**").hasAnyRole("ADMIN", "SUPERADMIN")
                         .requestMatchers(HttpMethod.GET, "/api/attendance/user/*/paged").hasAnyRole("EMPLOYEE", "ADMIN", "SUPERADMIN")
-                        .requestMatchers(HttpMethod.POST, "/api/attendance/checkin", "/api/attendance/checkout").permitAll()
                         .requestMatchers("/api/attendance/**").hasAnyRole("ADMIN", "SUPERADMIN")
                         // Payroll endpoints
                         .requestMatchers(HttpMethod.POST, "/api/payroll/generate", "/api/payroll/generate/bulk").hasAnyRole("ADMIN", "SUPERADMIN")
@@ -104,7 +101,8 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET, "/api/payroll", "/api/payroll/*").hasAnyRole("EMPLOYEE", "ADMIN", "SUPERADMIN")
                         .requestMatchers(HttpMethod.GET, "/api/payroll/user/*").hasAnyRole("EMPLOYEE", "ADMIN", "SUPERADMIN")
                         // Payroll period endpoints
-                        .requestMatchers(HttpMethod.POST, "/api/payroll/periods", "/api/payroll/periods/*/lock", "/api/payroll/periods/*/unlock").hasAnyRole("ADMIN", "SUPERADMIN")
+                        .requestMatchers(HttpMethod.POST, "/api/payroll/periods").hasAnyRole("ADMIN", "SUPERADMIN")
+                        .requestMatchers(HttpMethod.PUT, "/api/payroll/periods/*/lock", "/api/payroll/periods/*/unlock").hasAnyRole("ADMIN", "SUPERADMIN")
                         .requestMatchers(HttpMethod.GET, "/api/payroll/periods", "/api/payroll/periods/*", "/api/payroll/periods/check").authenticated()
                         // Payroll policy endpoints
                         .requestMatchers(HttpMethod.POST, "/api/payroll/policies", "/api/payroll/policies/*").hasAnyRole("ADMIN", "SUPERADMIN")

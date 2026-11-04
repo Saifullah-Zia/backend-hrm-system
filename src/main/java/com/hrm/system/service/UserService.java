@@ -1,12 +1,12 @@
 package com.hrm.system.service;
 
+import java.time.LocalDateTime;
 import com.hrm.system.dto.UserDTO;
 import com.hrm.system.model.ProbationStatus;
 import com.hrm.system.model.User;
 import com.hrm.system.repository.UserRepository;
 import com.hrm.system.repository.ResignationRepository;
 import com.hrm.system.repository.DocumentRepository;
-import com.hrm.system.repository.ConversationRepository;
 import com.hrm.system.repository.AuditLogRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.core.userdetails.UserDetails;
@@ -38,9 +38,6 @@ public class UserService implements UserDetailsService {
 
     @Autowired
     private DocumentRepository documentRepository;
-
-    @Autowired
-    private ConversationRepository conversationRepository;
 
     @Autowired
     private AuditLogRepository auditLogRepository;
@@ -87,6 +84,7 @@ public class UserService implements UserDetailsService {
 
         if (userDetails.getPassword() != null && !userDetails.getPassword().isEmpty()) {
             existingUser.setPassword(passwordEncoder.encode(userDetails.getPassword()));
+            existingUser.setPasswordChangedAt(LocalDateTime.now());
         }
 
         existingUser.setRole(userDetails.getRole());
@@ -114,7 +112,6 @@ public class UserService implements UserDetailsService {
         // Nullify foreign keys referencing this user in other tables before deleting
         resignationRepository.nullifyApprovedBy(id);
         documentRepository.nullifyUploadedBy(id);
-        conversationRepository.nullifyCreatedBy(id);
         auditLogRepository.nullifyPerformedBy(id);
         
         userRepository.delete(user);
@@ -124,11 +121,15 @@ public class UserService implements UserDetailsService {
         User user = userRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("User not found with ID " + id));
 
-        if (!passwordEncoder.matches(oldPassword, user.getPassword())) {
+        if (oldPassword == null || !passwordEncoder.matches(oldPassword, user.getPassword())) {
             throw new RuntimeException("Old password is incorrect");
+        }
+        if (newPassword == null || newPassword.length() < 8) {
+            throw new RuntimeException("New password must be at least 8 characters.");
         }
 
         user.setPassword(passwordEncoder.encode(newPassword));
+        user.setPasswordChangedAt(LocalDateTime.now());
         userRepository.save(user);
     }
 
@@ -179,12 +180,15 @@ public class UserService implements UserDetailsService {
     @Override
     public UserDetails loadUserByUsername(String username) throws UsernameNotFoundException {
         String cleanUsername = username != null ? username.trim() : "";
-        // JWT subject is name — try name first, then email (case-insensitive) as fallback
-        User user = userRepository.findByName(cleanUsername)
-                .orElseGet(() -> userRepository.findByEmailIgnoreCase(cleanUsername)
-                        .orElseThrow(() -> new UsernameNotFoundException(
-                                "User not found: " + cleanUsername)));
+        // Names are not unique, so accounts are only ever resolved by email or id.
+        User user = userRepository.findByEmailIgnoreCase(cleanUsername)
+                .orElseThrow(() -> new UsernameNotFoundException("User not found"));
+        return new com.hrm.system.security.CustomUserDetails(user);
+    }
 
+    public com.hrm.system.security.CustomUserDetails loadUserDetailsById(Long id) {
+        User user = userRepository.findById(id)
+                .orElseThrow(() -> new UsernameNotFoundException("User not found"));
         return new com.hrm.system.security.CustomUserDetails(user);
     }
 }

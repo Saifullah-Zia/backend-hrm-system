@@ -68,10 +68,10 @@ public class PayrollGenerationHelper {
      * If this throws, only this employee's transaction is rolled back —
      * the outer bulk transaction is completely unaffected.
      *
-     * @return true if a new payroll record was created, false if it was skipped
+     * @return null if a new payroll record was created, otherwise the reason it was skipped
      */
     @Transactional(propagation = Propagation.REQUIRES_NEW)
-    public boolean generatePayrollForEmployee(Long payrollPeriodId, Long employeeId, Long generatedBy) {
+    public String generatePayrollForEmployee(Long payrollPeriodId, Long employeeId, Long generatedBy) {
         PayrollPeriod payrollPeriod = payrollPeriodRepository.findById(payrollPeriodId)
                 .orElseThrow(() -> new RuntimeException("Payroll period not found: " + payrollPeriodId));
 
@@ -81,14 +81,20 @@ public class PayrollGenerationHelper {
         // Skip non-EMPLOYEE users (ADMIN and SUPERADMIN should not get payroll generated)
         if (employee.getRole() != Role.EMPLOYEE) {
             System.out.println("ℹ User " + employeeId + " (" + employee.getRole() + ") is not Role.EMPLOYEE — skipping.");
-            return false;
+            return "not an employee account";
         }
 
         // Skip if payroll already exists for this employee + period
         Optional<Payroll> existing = payrollRepository.findByUserAndPayrollPeriod(employee, payrollPeriod);
         if (existing.isPresent()) {
             System.out.println("ℹ Payroll already exists for employee " + employeeId + " — skipping.");
-            return false;
+            return "already exists";
+        }
+
+        String ineligibleReason = payrollIneligibilityReason(employee);
+        if (ineligibleReason != null) {
+            System.out.println("ℹ Employee " + employeeId + " skipped — " + ineligibleReason);
+            return ineligibleReason;
         }
 
         // Look up attendance summary or construct fallback
@@ -163,7 +169,28 @@ public class PayrollGenerationHelper {
                         employee.getName(), payrollPeriod.getMonth(), payrollPeriod.getYear(), netSalaryBd.doubleValue()),
                 generatedBy);
 
-        return true;
+        return null;
+    }
+
+    /**
+     * Why an employee should not get a payroll (unverified sign-up, not ACTIVE,
+     * or no basic salary set), or null when they are eligible.
+     */
+    public String payrollIneligibilityReason(User employee) {
+        if (!employee.isEnabled()) {
+            return "email not verified";
+        }
+        Optional<EmployeeProfile> profile = employeeProfileRepository.findByUserId(employee.getId());
+        EmploymentStatus status = profile.map(EmployeeProfile::getEmploymentStatus).orElse(null);
+        if (status == EmploymentStatus.INACTIVE || status == EmploymentStatus.TERMINATED) {
+            return "employment status is " + status;
+        }
+        boolean hasSalary = (employee.getBasicSalary() != null && employee.getBasicSalary() > 0)
+                || profile.map(p -> p.getBasicSalary() != null && p.getBasicSalary() > 0).orElse(false);
+        if (!hasSalary) {
+            return "no basic salary set";
+        }
+        return null;
     }
 
     /**

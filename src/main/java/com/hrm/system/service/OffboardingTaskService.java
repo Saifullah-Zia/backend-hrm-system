@@ -117,6 +117,17 @@ public class OffboardingTaskService {
                 .collect(Collectors.toList());
     }
 
+    /** True when the user is the employee leaving, or the person the task is assigned to. */
+    @Transactional(readOnly = true)
+    public boolean isTaskParticipant(Long taskId, Long userId) {
+        OffboardingTask task = offboardingTaskRepository.findById(taskId)
+                .orElseThrow(() -> new ResourceNotFoundException("Offboarding task not found: " + taskId));
+        boolean assigned = task.getAssignedTo() != null && userId.equals(task.getAssignedTo().getId());
+        boolean leaving = task.getEmployee() != null && task.getEmployee().getUser() != null
+                && userId.equals(task.getEmployee().getUser().getId());
+        return assigned || leaving;
+    }
+
     // ─────────────────────────────────────────────────────
     // UPDATE task status
     // ─────────────────────────────────────────────────────

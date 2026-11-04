@@ -18,6 +18,12 @@ import java.util.UUID;
 @RequestMapping("/api/leaves")
 public class LeaveAttachmentController {
 
+    @org.springframework.beans.factory.annotation.Autowired
+    private com.hrm.system.security.AccessGuard accessGuard;
+
+    @org.springframework.beans.factory.annotation.Autowired
+    private com.hrm.system.repository.LeaveRepository leaveRepository;
+
     // Was a hardcoded relative path ("uploads/leaves/"), which lives inside the
     // container's own filesystem. Railway containers are ephemeral — every
     // redeploy, restart, or new instance wipes that disk, so previously
@@ -35,9 +41,7 @@ public class LeaveAttachmentController {
     public ResponseEntity<Map<String, String>> uploadAttachment(
             @RequestParam("file") MultipartFile file) throws IOException {
 
-        if (file.isEmpty()) {
-            return ResponseEntity.badRequest().body(Map.of("error", "Uploaded file is empty"));
-        }
+        String extension = "." + com.hrm.system.util.UploadRules.requireAllowedExtension(file);
 
         // Ensure directory exists
         Path uploadPath = Paths.get(uploadDir);
@@ -46,9 +50,6 @@ public class LeaveAttachmentController {
         }
 
         String originalName = file.getOriginalFilename() != null ? file.getOriginalFilename() : "file";
-        String extension = originalName.contains(".")
-                ? originalName.substring(originalName.lastIndexOf("."))
-                : "";
         String savedFileName = UUID.randomUUID() + extension;
         Path savedPath = uploadPath.resolve(savedFileName).toAbsolutePath();
 
@@ -58,7 +59,7 @@ public class LeaveAttachmentController {
 
         return ResponseEntity.ok(Map.of(
                 "fileUrl", fileUrl,
-                "fileName", originalName
+                "fileName", com.hrm.system.util.UploadRules.safeFileName(originalName)
         ));
     }
 
@@ -71,15 +72,15 @@ public class LeaveAttachmentController {
             return ResponseEntity.badRequest().build();
         }
 
+        if (!accessGuard.isPrivileged()
+                && !leaveRepository.existsByAttachmentUrlAndUserId("/api/leaves/files/" + fileName, accessGuard.currentUserId())) {
+            throw new org.springframework.security.access.AccessDeniedException("You can only open your own attachments");
+        }
+
         Path filePath = Paths.get(uploadDir).resolve(fileName);
-        if (!Files.exists(filePath)) {
+        if (!Files.isRegularFile(filePath)) {
             return ResponseEntity.notFound().build();
         }
-        byte[] data = Files.readAllBytes(filePath);
-        String mimeType = Files.probeContentType(filePath);
-        if (mimeType == null) mimeType = "application/octet-stream";
-        return ResponseEntity.ok()
-                .contentType(MediaType.parseMediaType(mimeType))
-                .body(data);
+        return com.hrm.system.util.UploadRules.fileResponse(fileName).body(Files.readAllBytes(filePath));
     }
 }

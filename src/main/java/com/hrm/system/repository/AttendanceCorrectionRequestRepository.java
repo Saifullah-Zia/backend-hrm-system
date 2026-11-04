@@ -13,5 +13,7 @@ import java.time.LocalDate;
 public interface AttendanceCorrectionRequestRepository extends JpaRepository<AttendanceCorrectionRequest, Long> {
     List<AttendanceCorrectionRequest> findByUserIdOrderByCreatedAtDesc(Long userId);
     List<AttendanceCorrectionRequest> findByStatusOrderByCreatedAtDesc(CorrectionStatus status);
+
+    long countByStatus(CorrectionStatus status);
     Optional<AttendanceCorrectionRequest> findByUserIdAndDate(Long userId, LocalDate date);
 }

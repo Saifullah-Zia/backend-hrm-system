@@ -13,6 +13,12 @@ import org.springframework.web.bind.annotation.*;
 @RequestMapping("/api/offboarding-tasks")
 @RequiredArgsConstructor
 public class OffboardingTaskController {
+    @org.springframework.beans.factory.annotation.Autowired
+    private com.hrm.system.service.ResignationService resignationService;
+
+    @org.springframework.beans.factory.annotation.Autowired
+    private com.hrm.system.security.AccessGuard accessGuard;
+
 
     private final OffboardingTaskService offboardingTaskService;
 
@@ -35,6 +41,7 @@ public class OffboardingTaskController {
     @PreAuthorize("hasAnyRole('ADMIN', 'SUPERADMIN', 'EMPLOYEE')")
     public ResponseEntity<List<OffboardingTaskDto.Response>> getByResignation(
             @PathVariable Long resignationId) {
+        accessGuard.requireOwnProfileOrPrivileged(resignationService.getById(resignationId).getEmployeeId());
         return ResponseEntity.ok(offboardingTaskService.getTasksByResignation(resignationId));
     }
 
@@ -46,6 +53,7 @@ public class OffboardingTaskController {
     @PreAuthorize("hasAnyRole('ADMIN', 'SUPERADMIN', 'EMPLOYEE')")
     public ResponseEntity<List<OffboardingTaskDto.Response>> getMyTasks(
             @PathVariable Long userId) {
+        accessGuard.requireSelfOrPrivileged(userId);
         return ResponseEntity.ok(offboardingTaskService.getMyPendingTasks(userId));
     }
 
@@ -68,6 +76,9 @@ public class OffboardingTaskController {
     public ResponseEntity<OffboardingTaskDto.Response> update(
             @PathVariable Long id,
             @RequestBody OffboardingTaskDto.UpdateRequest request) {
+        if (!accessGuard.isPrivileged() && !offboardingTaskService.isTaskParticipant(id, accessGuard.currentUserId())) {
+            throw new org.springframework.security.access.AccessDeniedException("You can only update your own tasks");
+        }
         return ResponseEntity.ok(offboardingTaskService.updateTask(id, request));
     }
 }

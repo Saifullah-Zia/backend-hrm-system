@@ -1,5 +1,6 @@
 package com.hrm.system.controller;
 
+import org.springframework.security.access.prepost.PreAuthorize;
 import com.hrm.system.dto.PayrollPeriodDto;
 import com.hrm.system.service.PayrollPeriodService;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -12,6 +13,9 @@ import java.util.List;
 @RequestMapping("/api/payroll/periods")
 @CrossOrigin(origins = "*")
 public class PayrollPeriodController {
+    @org.springframework.beans.factory.annotation.Autowired
+    private com.hrm.system.security.AccessGuard accessGuard;
+
 
     private final PayrollPeriodService payrollPeriodService;
 
@@ -21,6 +25,7 @@ public class PayrollPeriodController {
     }
 
     @PostMapping
+    @PreAuthorize("hasAnyRole('ADMIN', 'SUPERADMIN')")
     public ResponseEntity<PayrollPeriodDto> createPayrollPeriod(@RequestBody PayrollPeriodDto dto) {
         PayrollPeriodDto created = payrollPeriodService.createPayrollPeriod(
                 dto.getMonth(), dto.getYear(), dto.getCompany(), dto.getDepartment());
@@ -28,14 +33,16 @@ public class PayrollPeriodController {
     }
 
     @PutMapping("/{id}/lock")
-    public ResponseEntity<PayrollPeriodDto> lockPayrollPeriod(@PathVariable Long id, @RequestParam Long userId) {
-        PayrollPeriodDto locked = payrollPeriodService.lockPayrollPeriod(id, userId);
+    @PreAuthorize("hasAnyRole('ADMIN', 'SUPERADMIN')")
+    public ResponseEntity<PayrollPeriodDto> lockPayrollPeriod(@PathVariable Long id) {
+        PayrollPeriodDto locked = payrollPeriodService.lockPayrollPeriod(id, accessGuard.currentUserId());
         return ResponseEntity.ok(locked);
     }
 
     @PutMapping("/{id}/unlock")
-    public ResponseEntity<PayrollPeriodDto> unlockPayrollPeriod(@PathVariable Long id, @RequestParam Long userId) {
-        PayrollPeriodDto unlocked = payrollPeriodService.unlockPayrollPeriod(id, userId);
+    @PreAuthorize("hasAnyRole('ADMIN', 'SUPERADMIN')")
+    public ResponseEntity<PayrollPeriodDto> unlockPayrollPeriod(@PathVariable Long id) {
+        PayrollPeriodDto unlocked = payrollPeriodService.unlockPayrollPeriod(id, accessGuard.currentUserId());
         return ResponseEntity.ok(unlocked);
     }
 

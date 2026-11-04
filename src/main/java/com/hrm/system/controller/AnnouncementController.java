@@ -59,7 +59,7 @@ public class AnnouncementController {
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "5") int size) {
 
-        Pageable pageable = PageRequest.of(page, size, Sort.by("createdAt").descending());
+        Pageable pageable = com.hrm.system.util.PageLimits.of(page, size, Sort.by("createdAt").descending());
         return ResponseEntity.ok(announcementService.getPaged(pageable));
     }
 }

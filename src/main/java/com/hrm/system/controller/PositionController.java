@@ -4,6 +4,7 @@ import com.hrm.system.dto.PositionDto;
 import com.hrm.system.service.PositionService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import java.util.List;
@@ -33,12 +34,14 @@ public class PositionController {
     }
 
     @PostMapping
+    @PreAuthorize("hasAnyRole('ADMIN', 'SUPERADMIN')")
     public ResponseEntity<PositionDto> create(
             @Valid @RequestBody PositionDto dto) {
         return ResponseEntity.ok(positionService.createPosition(dto));
     }
 
     @PutMapping("/{id}")
+    @PreAuthorize("hasAnyRole('ADMIN', 'SUPERADMIN')")
     public ResponseEntity<PositionDto> update(
             @PathVariable Long id,
             @Valid @RequestBody PositionDto dto) {
@@ -46,6 +49,7 @@ public class PositionController {
     }
 
     @DeleteMapping("/{id}")
+    @PreAuthorize("hasAnyRole('ADMIN', 'SUPERADMIN')")
     public ResponseEntity<String> delete(@PathVariable Long id) {
         positionService.deletePosition(id);
         return ResponseEntity.ok("Position deleted successfully");

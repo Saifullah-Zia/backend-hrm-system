@@ -118,6 +118,10 @@ public class PayslipService {
         return payslipData;
     }
 
+    private static String esc(Object value) {
+        return value == null ? "" : org.springframework.web.util.HtmlUtils.htmlEscape(value.toString());
+    }
+
     public String generatePayslipHtml(Long payrollId, Long requestingUserId, boolean isPrivileged) {
         Map<String, Object> data = getPayslipData(payrollId, requestingUserId, isPrivileged);
 
@@ -125,7 +129,7 @@ public class PayslipService {
         html.append("<!DOCTYPE html>\n");
         html.append("<html>\n");
         html.append("<head>\n");
-        html.append("<title>Payslip - ").append(data.get("month")).append(" ").append(data.get("year")).append("</title>\n");
+        html.append("<title>Payslip - ").append(esc(data.get("month"))).append(" ").append(data.get("year")).append("</title>\n");
         html.append("<style>\n");
         html.append("body { font-family: Arial, sans-serif; margin: 20px; }\n");
         html.append(".header { text-align: center; margin-bottom: 30px; }\n");
@@ -142,13 +146,13 @@ public class PayslipService {
 
         html.append("<div class=\"header\">\n");
         html.append("<h1>PAYSLIP</h1>\n");
-        html.append("<h2>").append(data.get("month")).append(" ").append(data.get("year")).append("</h2>\n");
+        html.append("<h2>").append(esc(data.get("month"))).append(" ").append(data.get("year")).append("</h2>\n");
         html.append("</div>\n");
 
         html.append("<div class=\"section\">\n");
         html.append("<h3>Employee Information</h3>\n");
-        html.append("<p><span class=\"label\">Name:</span><span class=\"value\">").append(data.get("employeeName")).append("</span></p>\n");
-        html.append("<p><span class=\"label\">Email:</span><span class=\"value\">").append(data.get("employeeEmail")).append("</span></p>\n");
+        html.append("<p><span class=\"label\">Name:</span><span class=\"value\">").append(esc(data.get("employeeName"))).append("</span></p>\n");
+        html.append("<p><span class=\"label\">Email:</span><span class=\"value\">").append(esc(data.get("employeeEmail"))).append("</span></p>\n");
         html.append("</div>\n");
 
         html.append("<div class=\"section\">\n");
@@ -179,10 +183,10 @@ public class PayslipService {
             html.append("<tr><th>Item Name</th><th>Type</th><th>Amount</th><th>Description</th></tr>\n");
             for (PayrollItem item : items) {
                 html.append("<tr>")
-                    .append("<td>").append(item.getName()).append("</td>")
+                    .append("<td>").append(esc(item.getName())).append("</td>")
                     .append("<td>").append(item.getType()).append("</td>")
                     .append("<td>PKR ").append(String.format("%.2f", item.getAmount())).append("</td>")
-                    .append("<td>").append(item.getDescription() != null ? item.getDescription() : "").append("</td>")
+                    .append("<td>").append(esc(item.getDescription())).append("</td>")
                     .append("</tr>\n");
             }
             html.append("</table>\n");

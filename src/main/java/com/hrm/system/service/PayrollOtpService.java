@@ -89,7 +89,7 @@ public class PayrollOtpService {
         }
 
         // 3. Generate 6-digit OTP code
-        String code = String.format("%06d", new Random().nextInt(1000000));
+        String code = String.format("%06d", new java.security.SecureRandom().nextInt(1000000));
         state.setCode(code);
         state.setExpiry(now.plusMinutes(5));
         state.setAttempts(0); // reset attempts on new code send

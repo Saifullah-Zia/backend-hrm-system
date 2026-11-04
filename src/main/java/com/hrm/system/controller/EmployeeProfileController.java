@@ -26,6 +26,12 @@ public class EmployeeProfileController {
 
     private final EmployeeProfileService employeeProfileService;
     private final SalaryOtpService salaryOtpService;
+    private final com.hrm.system.security.AccessGuard accessGuard;
+    private final com.hrm.system.security.RateLimiter rateLimiter;
+
+    private static final java.util.Set<String> PAGED_SORT_FIELDS =
+            java.util.Set.of("id", "firstName", "lastName", "joiningDate", "createdAt", "updatedAt");
+    private static final java.time.Duration SALARY_OTP_WINDOW = java.time.Duration.ofMinutes(15);
 
     private boolean checkRevealSalary(HttpServletRequest request) {
         String token = request.getHeader("X-Salary-Reveal-Token");
@@ -34,11 +40,13 @@ public class EmployeeProfileController {
     }
 
     @GetMapping
+    @PreAuthorize("hasAnyRole('ADMIN', 'SUPERADMIN')")
     public ResponseEntity<List<EmployeeProfileDto>> getAll(HttpServletRequest request) {
         return ResponseEntity.ok(employeeProfileService.getAll(checkRevealSalary(request)));
     }
 
     @GetMapping("/paged")
+    @PreAuthorize("hasAnyRole('ADMIN', 'SUPERADMIN')")
     public ResponseEntity<Page<EmployeeProfileDto>> getPaged(
             @RequestParam(defaultValue = "0")    int page,
             @RequestParam(defaultValue = "10")   int size,
@@ -48,16 +56,18 @@ public class EmployeeProfileController {
             @RequestParam(required = false)      Long departmentId,
             HttpServletRequest request) {
 
+        String sortField = PAGED_SORT_FIELDS.contains(sortBy) ? sortBy : "firstName";
         Sort sort = sortDir.equalsIgnoreCase("desc")
-                ? Sort.by(sortBy).descending()
-                : Sort.by(sortBy).ascending();
+                ? Sort.by(sortField).descending()
+                : Sort.by(sortField).ascending();
 
-        Pageable pageable = PageRequest.of(page, size, sort);
+        Pageable pageable = com.hrm.system.util.PageLimits.of(page, size, sort);
         return ResponseEntity.ok(
                 employeeProfileService.getPaged(search, departmentId, pageable, checkRevealSalary(request)));
     }
 
     @GetMapping("/{id}")
+    @PreAuthorize("hasAnyRole('ADMIN', 'SUPERADMIN')")
     public ResponseEntity<EmployeeProfileDto> getById(
             @PathVariable Long id,
             HttpServletRequest request) {
@@ -69,6 +79,7 @@ public class EmployeeProfileController {
     public ResponseEntity<EmployeeProfileDto> getByUserId(
             @PathVariable Long userId,
             HttpServletRequest request) {
+        accessGuard.requireSelfOrPrivileged(userId);
         boolean revealSalary = checkRevealSalary(request);
         if (!revealSalary) {
             // Auto-reveal salary when the logged-in user is fetching their own profile
@@ -175,11 +186,12 @@ public class EmployeeProfileController {
         if (adminUserId == null) {
             return ResponseEntity.status(401).body(Map.of("error", "Unauthorized: user ID not found in token."));
         }
+        rateLimiter.consume("salary-otp-send:" + adminUserId, 5, SALARY_OTP_WINDOW);
         try {
             salaryOtpService.generateAndSend(adminUserId);
             return ResponseEntity.ok(Map.of("message", "Verification code sent to your registered email."));
         } catch (Exception e) {
-            return ResponseEntity.status(500).body(Map.of("error", "Failed to send OTP: " + e.getMessage()));
+            return ResponseEntity.status(500).body(Map.of("error", "Failed to send the verification code. Please try again."));
         }
     }
 
@@ -200,8 +212,10 @@ public class EmployeeProfileController {
         if (code == null || code.trim().isEmpty()) {
             return ResponseEntity.badRequest().body(Map.of("valid", false, "error", "Code is required."));
         }
+        rateLimiter.consume("salary-otp-verify:" + adminUserId, 5, SALARY_OTP_WINDOW);
         boolean valid = salaryOtpService.verify(adminUserId, code);
         if (valid) {
+            rateLimiter.clear("salary-otp-verify:" + adminUserId);
             String token = salaryOtpService.generateRevealToken(adminUserId);
             return ResponseEntity.ok(Map.of("valid", true, "token", token));
         } else {

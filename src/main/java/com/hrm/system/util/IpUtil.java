@@ -4,28 +4,24 @@ import jakarta.servlet.http.HttpServletRequest;
 
 public class IpUtil {
 
+    /**
+     * Railway's public edge replaces any client-sent X-Real-IP, so that value is trustworthy. Other
+     * headers such as CF-Connecting-IP can be set by anyone and must never be used for access checks.
+     */
     public static String getClientIp(HttpServletRequest request) {
         if (request == null) {
             return "";
         }
 
-        // Check Cloudflare header first
-        String ip = request.getHeader("CF-Connecting-IP");
+        String ip = request.getHeader("X-Real-IP");
         if (isValidIp(ip)) {
             return ip.trim();
         }
 
-        // Check X-Real-IP header
-        ip = request.getHeader("X-Real-IP");
-        if (isValidIp(ip)) {
-            return ip.trim();
-        }
-
-        // Check X-Forwarded-For header (comma-separated list, first IP is client)
+        // Proxies append the address they saw, so only the last entry is not client-controlled.
         ip = request.getHeader("X-Forwarded-For");
         if (isValidIp(ip)) {
-            String[] parts = ip.split(",");
-            return parts[0].trim();
+            return ip.substring(ip.lastIndexOf(',') + 1).trim();
         }
 
         return request.getRemoteAddr() != null ? request.getRemoteAddr().trim() : "";

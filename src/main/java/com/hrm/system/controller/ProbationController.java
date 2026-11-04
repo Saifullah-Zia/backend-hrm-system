@@ -13,6 +13,9 @@ import java.util.List;
 @RequestMapping("/api/probation")
 @RequiredArgsConstructor
 public class ProbationController {
+    @org.springframework.beans.factory.annotation.Autowired
+    private com.hrm.system.security.AccessGuard accessGuard;
+
 
     private final ProbationService probationService;
 
@@ -68,6 +71,7 @@ public class ProbationController {
     @GetMapping("/check/{userId}")
     @PreAuthorize("hasAnyRole('ADMIN', 'SUPERADMIN', 'EMPLOYEE')")
     public ResponseEntity<Boolean> isOnProbation(@PathVariable Long userId) {
+        accessGuard.requireSelfOrPrivileged(userId);
         return ResponseEntity.ok(probationService.isOnProbation(userId));
     }
 }

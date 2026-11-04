@@ -25,27 +25,6 @@ public interface UserRepository extends JpaRepository<User, Long> {
 
     // REMOVED findByUsername — User has no username field
 
-    @Modifying
-    @Transactional
-    @Query("""
-        UPDATE User u
-        SET u.presenceStatus = :status,
-            u.lastSeenAt = :lastSeen
-        WHERE LOWER(u.email) = LOWER(:email)
-    """)
-    void updatePresenceStatus(
-            @Param("email") String email,
-            @Param("status") String status,
-            @Param("lastSeen") LocalDateTime lastSeen
-    );
-
-    @Query("""
-        SELECT u FROM User u
-        WHERE LOWER(u.name) LIKE LOWER(CONCAT('%', :query, '%'))
-        OR LOWER(u.email) LIKE LOWER(CONCAT('%', :query, '%'))
-    """)
-    List<User> searchByNameOrEmail(@Param("query") String query);
-
     // Presence heartbeat: only writes if not stamped since :threshold (throttle)
     @Modifying
     @Transactional

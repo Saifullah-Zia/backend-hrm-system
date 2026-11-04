@@ -19,6 +19,9 @@ import java.util.List;
 @RestController
 @RequestMapping("/api/leave")
 public class LeaveController {
+    @org.springframework.beans.factory.annotation.Autowired
+    private com.hrm.system.security.AccessGuard accessGuard;
+
 
     @Autowired
     private LeaveService leaveService;
@@ -30,6 +33,7 @@ public class LeaveController {
     @PostMapping
     @PreAuthorize("hasRole('SUPERADMIN') or hasRole('ADMIN') or hasRole('EMPLOYEE')")
     public ResponseEntity<LeaveDto> applyLeave(@RequestBody LeaveDto dto) {
+        accessGuard.requireSelfOrPrivileged(dto.getUserId());
         return new ResponseEntity<>(leaveService.applyLeave(dto), HttpStatus.CREATED);
     }
 
@@ -44,13 +48,16 @@ public class LeaveController {
     @GetMapping("/{id}")
     @PreAuthorize("hasRole('SUPERADMIN') or hasRole('ADMIN') or hasRole('EMPLOYEE')")
     public ResponseEntity<LeaveDto> getLeaveById(@PathVariable Long id) {
-        return ResponseEntity.ok(leaveService.getLeaveById(id));
+        LeaveDto leave = leaveService.getLeaveById(id);
+        accessGuard.requireSelfOrPrivileged(leave.getUserId());
+        return ResponseEntity.ok(leave);
     }
 
     // ── Get by user ──────────────────────────────────────────────────────────
     @GetMapping("/user/{userId}")
     @PreAuthorize("hasRole('SUPERADMIN') or hasRole('ADMIN') or hasRole('EMPLOYEE')")
     public ResponseEntity<List<LeaveDto>> getLeaveByUserId(@PathVariable Long userId) {
+        accessGuard.requireSelfOrPrivileged(userId);
         return ResponseEntity.ok(leaveService.getLeaveByUserID(userId));
     }
 
@@ -79,6 +86,7 @@ public class LeaveController {
     @PutMapping("/{id}")
     @PreAuthorize("hasRole('SUPERADMIN') or hasRole('ADMIN') or hasRole('EMPLOYEE')")
     public ResponseEntity<LeaveDto> updateLeave(@PathVariable Long id, @RequestBody LeaveDto dto) {
+        accessGuard.requireSelfOrPrivileged(leaveService.getLeaveById(id).getUserId());
         return ResponseEntity.ok(leaveService.updateLeave(id, dto));
     }
 
@@ -86,6 +94,7 @@ public class LeaveController {
     @DeleteMapping("/{id}")
     @PreAuthorize("hasRole('SUPERADMIN') or hasRole('ADMIN') or hasRole('EMPLOYEE')")
     public ResponseEntity<String> deleteLeave(@PathVariable Long id) {
+        accessGuard.requireSelfOrPrivileged(leaveService.getLeaveById(id).getUserId());
         leaveService.deleteLeave(id);
         return ResponseEntity.ok("Leave request withdrawn successfully.");
     }
@@ -97,7 +106,7 @@ public class LeaveController {
             @RequestParam(defaultValue = "10") int size,
             @RequestParam(required = false)    String status) {
 
-        Pageable pageable = PageRequest.of(page, size, Sort.by("startDate").descending());
+        Pageable pageable = com.hrm.system.util.PageLimits.of(page, size, Sort.by("startDate").descending());
         return ResponseEntity.ok(leaveService.getPagedRequests(status, pageable));
     }
 

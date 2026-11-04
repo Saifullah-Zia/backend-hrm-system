@@ -21,6 +21,9 @@ import java.util.List;
 @RequiredArgsConstructor
 
     public class DocumentController {
+    @org.springframework.beans.factory.annotation.Autowired
+    private com.hrm.system.security.AccessGuard accessGuard;
+
 
         private final DocumentService documentService;
 
@@ -33,10 +36,10 @@ import java.util.List;
         public ResponseEntity<DocumentDto.Response> uploadDocument(
                 @RequestPart("data")  DocumentDto.Request request,
                 @RequestPart("file") MultipartFile file,
-                @RequestParam("uploadedBy") Long uploadedByUserId) throws IOException {
+                @RequestParam(value = "uploadedBy", required = false) Long ignoredUploadedBy) throws IOException {
 
             return ResponseEntity.ok(
-                    documentService.uploadDocument(request, file, uploadedByUserId));
+                    documentService.uploadDocument(request, file, accessGuard.currentUserId()));
         }
 
         // ─────────────────────────────────────────────────────
@@ -48,6 +51,7 @@ import java.util.List;
         public ResponseEntity<List<DocumentDto.Response>> getByEmployee(
                 @PathVariable Long employeeId) {
 
+            accessGuard.requireOwnProfileOrPrivileged(employeeId);
             return ResponseEntity.ok(documentService.getDocumentsByEmployee(employeeId));
         }
 
@@ -67,6 +71,7 @@ import java.util.List;
                 @PathVariable Long employeeId,
                 @PathVariable DocumentType type) {
 
+            accessGuard.requireOwnProfileOrPrivileged(employeeId);
             return ResponseEntity.ok(documentService.getDocumentsByType(employeeId, type));
         }
 
@@ -77,7 +82,9 @@ import java.util.List;
         @GetMapping("/{id}")
         @PreAuthorize("hasAnyRole('ADMIN', 'SUPERADMIN', 'EMPLOYEE')")
         public ResponseEntity<DocumentDto.Response> getById(@PathVariable Long id) {
-            return ResponseEntity.ok(documentService.getDocumentById(id));
+            DocumentDto.Response document = documentService.getDocumentById(id);
+            accessGuard.requireOwnProfileOrPrivileged(document.getEmployeeId());
+            return ResponseEntity.ok(document);
         }
 
         // ─────────────────────────────────────────────────────
@@ -87,6 +94,7 @@ import java.util.List;
         @GetMapping("/{id}/download")
         @PreAuthorize("hasAnyRole('ADMIN', 'SUPERADMIN', 'EMPLOYEE')")
         public ResponseEntity<Resource> downloadDocument(@PathVariable Long id) throws IOException {
+            accessGuard.requireOwnProfileOrPrivileged(documentService.getDocumentById(id).getEmployeeId());
             Path filePath = documentService.getDocumentFilePath(id);
             Resource resource = new UrlResource(filePath.toUri());
 
@@ -95,8 +103,9 @@ import java.util.List;
             }
 
             return ResponseEntity.ok()
+                    .header("X-Content-Type-Options", "nosniff")
                     .header(HttpHeaders.CONTENT_DISPOSITION,
-                            "attachment; filename=\"" + filePath.getFileName() + "\"")
+                            "attachment; filename=\"" + com.hrm.system.util.UploadRules.safeFileName(filePath.getFileName().toString()) + "\"")
                     .body(resource);
         }
 

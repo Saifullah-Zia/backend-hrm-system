@@ -56,7 +56,9 @@ public class DocumentService {
                 .orElseThrow(() -> new ResourceNotFoundException(
                         "User not found with id: " + uploadedByUserId));
 
-        String fileName  = System.currentTimeMillis() + "_" + file.getOriginalFilename();
+        com.hrm.system.util.UploadRules.requireAllowedExtension(file);
+        String safeName  = com.hrm.system.util.UploadRules.safeFileName(file.getOriginalFilename());
+        String fileName  = System.currentTimeMillis() + "_" + safeName;
         String directory = STORAGE_DIR + request.getEmployeeId() + "/";
         Path filePath    = Paths.get(directory, fileName);
         Files.createDirectories(filePath.getParent());
@@ -65,7 +67,7 @@ public class DocumentService {
         Document document = Document.builder()
                 .employeeProfile(employee)
                 .title(request.getTitle())
-                .fileName(file.getOriginalFilename())
+                .fileName(safeName)
                 .filePath(filePath.toString())
                 .fileType(file.getContentType())
                 .fileSize(file.getSize())

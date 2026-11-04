@@ -40,7 +40,7 @@ public class LeaveBalanceService {
     @Transactional(readOnly = true)
     public Page<LeaveBalanceDto> getBalancesForUser(Long userId, int page, int size) {
         int year = LocalDate.now().getYear();
-        Pageable pageable = PageRequest.of(page, size, Sort.by("leaveType").ascending());
+        Pageable pageable = com.hrm.system.util.PageLimits.of(page, size, Sort.by("leaveType").ascending());
         return leaveBalanceRepository.findByUserIdAndYear(userId, year, pageable)
                 .map(this::mapToDto);
     }
@@ -49,7 +49,7 @@ public class LeaveBalanceService {
     @Transactional(readOnly = true)
     public Page<LeaveBalanceDto> getAllBalancesCurrentYear(int page, int size) {
         int year = LocalDate.now().getYear();
-        Pageable pageable = PageRequest.of(page, size, Sort.by("id").descending());
+        Pageable pageable = com.hrm.system.util.PageLimits.of(page, size, Sort.by("id").descending());
         return leaveBalanceRepository.findByYear(year, pageable)
                 .map(this::mapToDto);
     }

@@ -12,6 +12,7 @@ import org.springframework.web.server.ResponseStatusException;
 import java.util.stream.Collectors;
 
 @ControllerAdvice
+@lombok.extern.slf4j.Slf4j
 public class GlobalExceptionHandler {
 
     @ExceptionHandler(ResponseStatusException.class)
@@ -27,9 +28,34 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(message);
     }
 
+    @ExceptionHandler(org.springframework.dao.DataIntegrityViolationException.class)
+    public ResponseEntity<String> handleConflict(org.springframework.dao.DataIntegrityViolationException ex) {
+        log.warn("Data conflict: {}", ex.getMostSpecificCause().getMessage());
+        return ResponseEntity.status(HttpStatus.CONFLICT).body("This record already exists or is still in use.");
+    }
+
+    @ExceptionHandler({
+            org.springframework.http.converter.HttpMessageNotReadableException.class,
+            org.springframework.web.method.annotation.MethodArgumentTypeMismatchException.class
+    })
+    public ResponseEntity<String> handleUnreadable(RuntimeException ex) {
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body("Invalid request data.");
+    }
+
+    @ExceptionHandler({
+            org.springframework.dao.DataAccessException.class,
+            NullPointerException.class,
+            ClassCastException.class,
+            IndexOutOfBoundsException.class
+    })
+    public ResponseEntity<String> handleUnexpected(RuntimeException ex) {
+        log.error("Unexpected error", ex);
+        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("Something went wrong. Please try again.");
+    }
+
     @ExceptionHandler(RuntimeException.class)
     public ResponseEntity<String> handleRuntime(RuntimeException ex) {
-        ex.printStackTrace();
+        log.warn("Request failed: {}", ex.getMessage());
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(ex.getMessage());
     }
 

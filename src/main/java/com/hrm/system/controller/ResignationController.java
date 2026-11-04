@@ -20,6 +20,9 @@ import org.springframework.data.domain.Sort;
 @RequestMapping("/api/resignations")
 @RequiredArgsConstructor
 public class ResignationController {
+    @org.springframework.beans.factory.annotation.Autowired
+    private com.hrm.system.security.AccessGuard accessGuard;
+
 
     private final ResignationService resignationService;
 
@@ -31,6 +34,7 @@ public class ResignationController {
     @PreAuthorize("hasAnyRole('ADMIN', 'SUPERADMIN', 'EMPLOYEE')")
     public ResponseEntity<ResignationDto.Response> submit(
             @RequestBody ResignationDto.Request request) {
+        accessGuard.requireOwnProfileOrPrivileged(request.getEmployeeId());
         return ResponseEntity.ok(resignationService.submitResignation(request));
     }
 
@@ -42,7 +46,7 @@ public class ResignationController {
             @RequestParam(defaultValue = "10") int size,
             @RequestParam(required = false)    ResignationStatus status) {
 
-        Pageable pageable = PageRequest.of(page, size, Sort.by("createdAt").descending());
+        Pageable pageable = com.hrm.system.util.PageLimits.of(page, size, Sort.by("createdAt").descending());
         return ResponseEntity.ok(resignationService.getPaged(status, pageable));
     }
 
@@ -75,6 +79,7 @@ public class ResignationController {
     @PreAuthorize("hasAnyRole('ADMIN', 'SUPERADMIN', 'EMPLOYEE')")
     public ResponseEntity<List<ResignationDto.Response>> getByEmployee(
             @PathVariable Long employeeId) {
+        accessGuard.requireOwnProfileOrPrivileged(employeeId);
         return ResponseEntity.ok(resignationService.getByEmployee(employeeId));
     }
 
@@ -85,7 +90,9 @@ public class ResignationController {
     @GetMapping("/{id}")
     @PreAuthorize("hasAnyRole('ADMIN', 'SUPERADMIN', 'EMPLOYEE')")
     public ResponseEntity<ResignationDto.Response> getById(@PathVariable Long id) {
-        return ResponseEntity.ok(resignationService.getById(id));
+        ResignationDto.Response resignation = resignationService.getById(id);
+        accessGuard.requireOwnProfileOrPrivileged(resignation.getEmployeeId());
+        return ResponseEntity.ok(resignation);
     }
 
 
@@ -97,8 +104,8 @@ public class ResignationController {
     public ResponseEntity<ResignationDto.Response> process(
             @PathVariable Long id,
             @RequestBody ResignationDto.ApprovalRequest request,
-            @RequestParam Long approvedBy) {
-        return ResponseEntity.ok(resignationService.processResignation(id, request, approvedBy));
+            @RequestParam(value = "approvedBy", required = false) Long ignoredApprovedBy) {
+        return ResponseEntity.ok(resignationService.processResignation(id, request, accessGuard.currentUserId()));
     }
 
 
@@ -110,6 +117,7 @@ public class ResignationController {
     public ResponseEntity<ResignationDto.Response> withdraw(
             @PathVariable Long id,
             @RequestParam String reason) {
+        accessGuard.requireOwnProfileOrPrivileged(resignationService.getById(id).getEmployeeId());
         return ResponseEntity.ok(resignationService.withdrawResignation(id, reason));
     }
 

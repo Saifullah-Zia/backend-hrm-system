@@ -13,6 +13,9 @@ import java.util.List;
 @RestController
 @RequestMapping("/api/notices")
 public class NoticeController {
+    @org.springframework.beans.factory.annotation.Autowired
+    private com.hrm.system.security.AccessGuard accessGuard;
+
 
     @Autowired
     private NoticeService noticeService;
@@ -34,6 +37,7 @@ public class NoticeController {
     // Get notices for a specific user
     @GetMapping("/user/{userId}")
     public ResponseEntity<List<NoticeDto>> getNoticesByUserId(@PathVariable Long userId) {
+        accessGuard.requireSelfOrPrivileged(userId);
         return ResponseEntity.ok(noticeService.getNoticesByUserId(userId));
     }
 }

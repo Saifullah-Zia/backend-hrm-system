@@ -15,6 +15,10 @@ public interface LeaveRepository extends JpaRepository<Leave, Long> {
 
     List<Leave> findByStatus(LeaveStatus status);
 
+    long countByStatus(LeaveStatus status);
+
+    boolean existsByAttachmentUrlAndUserId(String attachmentUrl, Long userId);
+
     List<Leave> findByUserId(Long userId);
 
     List<Leave> findByUserIdAndType(Long userId, String type);

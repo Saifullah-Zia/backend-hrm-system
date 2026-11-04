@@ -6,7 +6,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.time.Instant;
-import java.util.Random;
+import java.security.SecureRandom;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
@@ -100,10 +100,12 @@ public class SalaryOtpService {
 
     // ── Helpers ───────────────────────────────────────────────────────────────
 
+    private static final SecureRandom RANDOM = new SecureRandom();
+
     private int generateCode() {
         int min = (int) Math.pow(10, OTP_LENGTH - 1); // 100000
         int max = (int) Math.pow(10, OTP_LENGTH) - 1; // 999999
-        return min + new Random().nextInt(max - min + 1);
+        return min + RANDOM.nextInt(max - min + 1);
     }
 
     /** Immutable value object to hold an OTP and its expiry timestamp. */

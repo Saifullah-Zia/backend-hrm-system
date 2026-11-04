@@ -13,6 +13,9 @@ import java.util.List;
 @RestController
 @RequestMapping("/api/attendance-corrections")
 public class AttendanceCorrectionRequestController {
+    @org.springframework.beans.factory.annotation.Autowired
+    private com.hrm.system.security.AccessGuard accessGuard;
+
 
     @Autowired
     private AttendanceCorrectionRequestService correctionRequestService;
@@ -20,6 +23,7 @@ public class AttendanceCorrectionRequestController {
     @PostMapping
     @PreAuthorize("hasRole('SUPERADMIN') or hasRole('ADMIN') or hasRole('EMPLOYEE')")
     public ResponseEntity<?> submitRequest(@RequestBody AttendanceCorrectionRequestDto dto) {
+        accessGuard.requireSelfOrPrivileged(dto.getUserId());
         try {
             return new ResponseEntity<>(correctionRequestService.submitRequest(dto), HttpStatus.CREATED);
         } catch (IllegalStateException e) {
@@ -32,6 +36,7 @@ public class AttendanceCorrectionRequestController {
     @GetMapping("/user/{userId}")
     @PreAuthorize("hasRole('SUPERADMIN') or hasRole('ADMIN') or hasRole('EMPLOYEE')")
     public ResponseEntity<List<AttendanceCorrectionRequestDto>> getRequestsByUser(@PathVariable Long userId) {
+        accessGuard.requireSelfOrPrivileged(userId);
         return ResponseEntity.ok(correctionRequestService.getRequestsByUser(userId));
     }
 

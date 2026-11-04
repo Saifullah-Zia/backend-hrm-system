@@ -49,6 +49,17 @@ public class User {
     @Column
     private String resetPasswordCode;
 
+    // Wrong-code counters; nullable so existing rows stay valid under ddl-auto=update.
+    @Column(name = "verification_attempts")
+    private Integer verificationAttempts;
+
+    @Column(name = "reset_password_attempts")
+    private Integer resetPasswordAttempts;
+
+    // Tokens issued before this moment are rejected.
+    @Column(name = "password_changed_at")
+    private LocalDateTime passwordChangedAt;
+
     @Column
     private LocalDateTime resetPasswordExpiry;
 
@@ -93,14 +104,6 @@ public class User {
     @OneToMany(mappedBy = "user", cascade = CascadeType.ALL, orphanRemoval = true)
     @JsonIgnore
     private List<AttendanceCorrectionRequest> attendanceCorrectionRequests;
-
-    @OneToMany(mappedBy = "sender", cascade = CascadeType.ALL, orphanRemoval = true)
-    @JsonIgnore
-    private List<ChatMessage> chatMessages;
-
-    @OneToMany(mappedBy = "employee", cascade = CascadeType.ALL, orphanRemoval = true)
-    @JsonIgnore
-    private List<ConversationMember> conversationMembers;
 
     // AuditLogs are preserved when user is deleted (performedBy is nullified instead of cascade)
     @OneToMany(mappedBy = "performedBy")

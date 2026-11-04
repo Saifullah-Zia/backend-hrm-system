@@ -18,6 +18,12 @@ import java.util.Map;
 @RestController
 @RequestMapping("/api/users")
 public class UserController {
+    @org.springframework.beans.factory.annotation.Autowired
+    private com.hrm.system.security.AccessGuard accessGuard;
+
+    @Autowired
+    private com.hrm.system.security.RateLimiter rateLimiter;
+
 
     @Autowired
     private UserService userService;
@@ -95,6 +101,8 @@ public class UserController {
     @PreAuthorize("hasRole('SUPERADMIN') or hasRole('ADMIN') or hasRole('EMPLOYEE')")
     public ResponseEntity<Map<String, String>> changePassword(
             @PathVariable Long id, @RequestBody Map<String, String> passwordRequest) {
+        accessGuard.requireSelfOrPrivileged(id);
+        rateLimiter.consume("change-password:" + id, 10, java.time.Duration.ofMinutes(15));
         userService.changePassword(id, passwordRequest.get("oldPassword"),
                 passwordRequest.get("newPassword"));
         Map<String, String> response = new HashMap<>();

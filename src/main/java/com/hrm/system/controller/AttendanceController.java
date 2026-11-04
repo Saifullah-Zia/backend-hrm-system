@@ -88,9 +88,11 @@ public class AttendanceController {
         }
     }
 
-    @GetMapping
-    public ResponseEntity<List<AttendanceDto>> getAllAttendance() {
-        return ResponseEntity.ok(attendanceService.getAll());
+    @GetMapping("/range")
+    public ResponseEntity<List<AttendanceDto>> getAttendanceRange(
+            @RequestParam @org.springframework.format.annotation.DateTimeFormat(iso = org.springframework.format.annotation.DateTimeFormat.ISO.DATE) java.time.LocalDate start,
+            @RequestParam @org.springframework.format.annotation.DateTimeFormat(iso = org.springframework.format.annotation.DateTimeFormat.ISO.DATE) java.time.LocalDate end) {
+        return ResponseEntity.ok(attendanceService.getRange(start, end));
     }
 
     @GetMapping("/paged")

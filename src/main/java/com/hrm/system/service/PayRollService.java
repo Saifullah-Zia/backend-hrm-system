@@ -80,6 +80,11 @@ public class PayRollService {
             throw new RuntimeException("Payroll already exists for this employee and period");
         }
 
+        String ineligibleReason = payrollGenerationHelper.payrollIneligibilityReason(employee);
+        if (ineligibleReason != null) {
+            throw new RuntimeException("Cannot generate payroll for " + employee.getName() + ": " + ineligibleReason);
+        }
+
         // Always refresh the summary so newly marked absences are picked up
         attendanceService.generateAttendanceSummary(employeeId, payrollPeriodId);
         AttendanceSummary attendanceSummary = attendanceSummaryRepository
@@ -162,14 +167,14 @@ public class PayRollService {
         // Step 2: Process each employee directly in its own independent transaction
         for (User employee : employees) {
             try {
-                boolean created = payrollGenerationHelper.generatePayrollForEmployee(
+                String skipReason = payrollGenerationHelper.generatePayrollForEmployee(
                         payrollPeriodId, employee.getId(), generatedBy);
-                if (created) {
+                if (skipReason == null) {
                     generated++;
                     details.append(String.format("Generated for %s (ID: %d). ", employee.getName(), employee.getId()));
                 } else {
                     skipped++;
-                    details.append(String.format("Skipped for %s (ID: %d) - already exists. ", employee.getName(), employee.getId()));
+                    details.append(String.format("Skipped for %s (ID: %d) - %s. ", employee.getName(), employee.getId(), skipReason));
                 }
             } catch (Exception e) {
                 failed++;
@@ -396,7 +401,7 @@ public class PayRollService {
 
     @Transactional(readOnly = true)
     public Page<PayRollDto> getAllPayroll(int page, int size, String search) {
-        Pageable pageable = PageRequest.of(page, size, Sort.by("id").descending());
+        Pageable pageable = com.hrm.system.util.PageLimits.of(page, size, Sort.by("id").descending());
         if (search != null && !search.trim().isEmpty()) {
             return payrollRepository.searchPayrolls(search.trim(), pageable).map(this::mapToDto);
         }
@@ -442,7 +447,7 @@ public class PayRollService {
             }
         }
 
-        Pageable pageable = PageRequest.of(page, size, Sort.by("id").descending());
+        Pageable pageable = com.hrm.system.util.PageLimits.of(page, size, Sort.by("id").descending());
         Page<PayRollDto> result = payrollRepository.findByUserId(userId, pageable).map(this::mapToDto);
 
         if (!isPrivileged) {
