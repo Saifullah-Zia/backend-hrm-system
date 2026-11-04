@@ -33,7 +33,8 @@ public class DocumentService {
     private final EmployeeProfileRepository employeeProfileRepository;
     private final UserRepository userRepository;
 
-    private static final String STORAGE_DIR = "uploads/documents/";
+    @org.springframework.beans.factory.annotation.Value("${app.upload.documents-dir:uploads/documents/}")
+    private String storageDir = "uploads/documents/";
 
     // ─────────────────────────────────────────────────────
     // UPLOAD a new document
@@ -59,7 +60,7 @@ public class DocumentService {
         com.hrm.system.util.UploadRules.requireAllowedExtension(file);
         String safeName  = com.hrm.system.util.UploadRules.safeFileName(file.getOriginalFilename());
         String fileName  = System.currentTimeMillis() + "_" + safeName;
-        String directory = STORAGE_DIR + request.getEmployeeId() + "/";
+        String directory = Paths.get(storageDir, String.valueOf(request.getEmployeeId())).toString();
         Path filePath    = Paths.get(directory, fileName);
         Files.createDirectories(filePath.getParent());
         Files.copy(file.getInputStream(), filePath, StandardCopyOption.REPLACE_EXISTING);

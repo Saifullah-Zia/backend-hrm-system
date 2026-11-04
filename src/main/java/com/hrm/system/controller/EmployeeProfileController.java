@@ -29,6 +29,9 @@ public class EmployeeProfileController {
     private final com.hrm.system.security.AccessGuard accessGuard;
     private final com.hrm.system.security.RateLimiter rateLimiter;
 
+    @org.springframework.beans.factory.annotation.Value("${app.upload.avatars-dir:uploads/avatars/}")
+    private String avatarUploadDir;
+
     private static final java.util.Set<String> PAGED_SORT_FIELDS =
             java.util.Set.of("id", "firstName", "lastName", "joiningDate", "createdAt", "updatedAt");
     private static final java.time.Duration SALARY_OTP_WINDOW = java.time.Duration.ofMinutes(15);
@@ -156,7 +159,7 @@ public class EmployeeProfileController {
             return ResponseEntity.badRequest().build();
         }
 
-        java.nio.file.Path filePath = java.nio.file.Paths.get("uploads/avatars/").resolve(safeName);
+        java.nio.file.Path filePath = java.nio.file.Paths.get(avatarUploadDir).resolve(safeName);
         if (!java.nio.file.Files.exists(filePath)) {
             return ResponseEntity.notFound().build();
         }

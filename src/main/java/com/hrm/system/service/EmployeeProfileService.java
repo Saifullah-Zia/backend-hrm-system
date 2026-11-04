@@ -326,7 +326,8 @@ public class EmployeeProfileService {
     // ─────────────────────────────────────────────────────
     // AVATAR UPLOAD & CLEANUP
     // ─────────────────────────────────────────────────────
-    private static final String AVATAR_UPLOAD_DIR = "uploads/avatars/";
+    @org.springframework.beans.factory.annotation.Value("${app.upload.avatars-dir:uploads/avatars/}")
+    private String avatarUploadDir = "uploads/avatars/";
     private final java.util.Map<Long, java.util.List<java.time.Instant>> uploadTimestamps = new java.util.concurrent.ConcurrentHashMap<>();
 
     private void checkRateLimit(Long userId) {
@@ -389,7 +390,7 @@ public class EmployeeProfileService {
 
         // Save new avatar file
         try {
-            java.nio.file.Path uploadDir = java.nio.file.Paths.get(AVATAR_UPLOAD_DIR);
+            java.nio.file.Path uploadDir = java.nio.file.Paths.get(avatarUploadDir);
             if (!java.nio.file.Files.exists(uploadDir)) {
                 java.nio.file.Files.createDirectories(uploadDir);
             }
@@ -414,7 +415,7 @@ public class EmployeeProfileService {
         try {
             String fileName = oldUrl.substring("/api/employee-profiles/avatars/".length());
             String safeFileName = java.nio.file.Paths.get(fileName).getFileName().toString();
-            java.nio.file.Path oldPath = java.nio.file.Paths.get(AVATAR_UPLOAD_DIR).resolve(safeFileName);
+            java.nio.file.Path oldPath = java.nio.file.Paths.get(avatarUploadDir).resolve(safeFileName);
             java.nio.file.Files.deleteIfExists(oldPath);
         } catch (Exception e) {
             System.err.println("Warning: Failed to delete old avatar file: " + e.getMessage());
